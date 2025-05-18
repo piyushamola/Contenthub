@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "author_tps",
+  "info": {
+    "singularName": "author-tp",
+    "pluralName": "author-tps",
+    "displayName": "author-tp"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "username": {
+      "type": "uid"
+    },
+    "authorimage": {
+      "type": "media",
+      "multiple": true,
+      "required": false,
+      "allowedTypes": ["images", "files", "videos", "audios"]
+    },
+    "authorbio": {
+      "type": "string"
+    },
+    "linkedin": {
+      "type": "uid"
+    },
+    "instagram": {
+      "type": "uid"
+    },
+    "facebook": {
+      "type": "uid"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "verticals",
+  "info": {
+    "singularName": "vertical",
+    "pluralName": "verticals",
+    "displayName": "Vertical",
+    "description": ""
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "uid",
+      "targetField": "displayName"
+    },
+    "title": {
+      "type": "text"
+    },
+    "verticalImage": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images", "files", "videos", "audios"]
+    },
+    "sub_verticals": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::sub-vertical.sub-vertical",
+      "mappedBy": "SubVertical"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "isSubVertical": {
+      "type": "boolean"
+    }
+  }
+}

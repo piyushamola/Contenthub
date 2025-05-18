@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sub_verticals",
+  "info": {
+    "singularName": "sub-vertical",
+    "pluralName": "sub-verticals",
+    "displayName": "SubVertical",
+    "description": ""
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "subVerticalDescription": {
+      "type": "text"
+    },
+    "SubVertical": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::vertical.vertical",
+      "inversedBy": "sub_verticals"
+    },
+    "name": {
+      "type": "uid",
+      "targetField": "displayName"
+    },
+    "displayName": {
+      "type": "string"
+    }
+  }
+}
