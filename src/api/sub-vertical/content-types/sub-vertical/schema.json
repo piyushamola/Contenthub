@@ -27,6 +27,11 @@
     },
     "displayName": {
       "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "required": false,
+      "unique": true
     }
   }
 }
