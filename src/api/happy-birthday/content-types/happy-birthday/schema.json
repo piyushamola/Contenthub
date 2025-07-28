@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "happy_birthdays",
+  "info": {
+    "singularName": "happy-birthday",
+    "pluralName": "happy-birthdays",
+    "displayName": "happy-birthday",
+    "description": ""
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "personname": {
+      "type": "string",
+      "required": true
+    },
+    "personemail": {
+      "type": "email",
+      "required": true,
+      "unique": true
+    },
+    "customroute": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "minLength": 3
+    },
+    "hostname": {
+      "type": "string",
+      "required": true
+    },
+    "hostemail": {
+      "type": "email",
+      "required": true
+    },
+    "birthdaymessages": {
+      "type": "json",
+      "required": true
+    }
+  }
+}
