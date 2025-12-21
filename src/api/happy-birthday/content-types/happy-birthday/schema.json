@@ -18,7 +18,7 @@
     "personemail": {
       "type": "email",
       "required": true,
-      "unique": true
+      "unique": false
     },
     "customroute": {
       "type": "string",
@@ -37,6 +37,29 @@
     "birthdaymessages": {
       "type": "json",
       "required": true
+    },
+    "images": {
+      "type": "media",
+      "multiple": true,
+      "required": false,
+      "allowedTypes": [
+        "images",
+        "videos",
+        "audios",
+        "files"
+      ]
+    },
+    "templateId": {
+      "type": "string",
+      "required": true
+    },
+    "musicId": {
+      "type": "string",
+      "required": true
+    },
+    "guestwishes": {
+      "type": "json",
+      "required": false
     }
   }
 }
