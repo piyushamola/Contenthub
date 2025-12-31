@@ -1,5 +1,6 @@
 const HAPPY_BIRTHDAY_UID = 'api::happy-birthday.happy-birthday';
 const UNPUBLISH_DELAY_MS = 23 * 60 * 60 * 1000;
+const UNPUBLISH_EXCLUDED_CUSTOM_ROUTES = ['elena', 'matt', 'mike'];
 
 module.exports = ({ env }) => ({
   host: env('HOST', '0.0.0.0'),
@@ -25,6 +26,9 @@ module.exports = ({ env }) => ({
                   publishedAt: {
                     $notNull: true,
                     $lte: cutoff,
+                  },
+                  customroute: {
+                    $notIn: UNPUBLISH_EXCLUDED_CUSTOM_ROUTES,
                   },
                 },
                 select: ['documentId', 'locale'],
