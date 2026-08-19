@@ -1,0 +1,99 @@
+{
+  "kind": "collectionType",
+  "collectionName": "celebration_payments",
+  "info": {
+    "singularName": "celebration-payment",
+    "pluralName": "celebration-payments",
+    "displayName": "Celebration Payment",
+    "description": "Private Razorpay payment and fulfillment state"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "orderId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "paymentId": {
+      "type": "string",
+      "required": false,
+      "unique": true
+    },
+    "celebration": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::happy-birthday.happy-birthday",
+      "inversedBy": "payments"
+    },
+    "celebrationDocumentId": {
+      "type": "string",
+      "required": true
+    },
+    "celebrationSlug": {
+      "type": "string",
+      "required": true
+    },
+    "amount": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "currency": {
+      "type": "enumeration",
+      "enum": ["INR"],
+      "required": true,
+      "default": "INR"
+    },
+    "countryCode": {
+      "type": "string",
+      "required": true,
+      "maxLength": 2
+    },
+    "method": {
+      "type": "string",
+      "required": false
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "created",
+        "paid",
+        "fulfilled",
+        "manual_refund_required",
+        "refunded",
+        "expired"
+      ],
+      "required": true,
+      "default": "created"
+    },
+    "retryCount": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "min": 0,
+      "max": 3
+    },
+    "lastError": {
+      "type": "text",
+      "required": false
+    },
+    "paidAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "fulfilledAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "refundedAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "operationsNotifiedAt": {
+      "type": "datetime",
+      "required": false
+    }
+  }
+}

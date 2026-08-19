@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "payment_webhook_events",
+  "info": {
+    "singularName": "payment-webhook-event",
+    "pluralName": "payment-webhook-events",
+    "displayName": "Payment Webhook Event",
+    "description": "Private Razorpay webhook idempotency records"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "eventId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "eventType": {
+      "type": "string",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["processing", "processed", "failed"],
+      "required": true,
+      "default": "processing"
+    },
+    "payloadHash": {
+      "type": "string",
+      "required": true
+    },
+    "orderId": {
+      "type": "string",
+      "required": false
+    },
+    "paymentId": {
+      "type": "string",
+      "required": false
+    },
+    "processedAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "lastError": {
+      "type": "text",
+      "required": false
+    }
+  }
+}
