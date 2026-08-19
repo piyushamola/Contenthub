@@ -60,6 +60,26 @@
     "guestwishes": {
       "type": "json",
       "required": false
+    },
+    "paymentRequired": {
+      "type": "boolean",
+      "required": true,
+      "default": false
+    },
+    "goLiveCountry": {
+      "type": "string",
+      "required": false,
+      "maxLength": 2
+    },
+    "expiresAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "payments": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::celebration-payment.celebration-payment",
+      "mappedBy": "celebration"
     }
   }
 }
