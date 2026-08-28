@@ -14,15 +14,5 @@ module.exports = {
         },
       },
     },
-    {
-      method: 'POST',
-      path: '/happy-birthdays/:documentId/go-live',
-      handler: 'happy-birthday.goLive',
-      config: {
-        auth: {
-          scope: [`${HAPPY_BIRTHDAY_SCOPE}.goLive`],
-        },
-      },
-    },
   ],
 };

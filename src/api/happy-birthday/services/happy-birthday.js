@@ -41,24 +41,18 @@ async function forEachWithConcurrency(items, concurrency, callback) {
 
 module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
   /**
-   * Unpublish celebrations whose 24-hour live window has finished.
-   *
-   * New celebrations get expiresAt when they go live. Older records do not
-   * have that field, so createdAt + 24 hours is the legacy fallback.
+   * Unpublish celebrations created at least 24 hours ago.
    */
   async unpublishExpired() {
     const now = new Date();
-    const legacyCutoff = new Date(now.getTime() - LIVE_DURATION_MS);
+    const createdAtCutoff = new Date(now.getTime() - LIVE_DURATION_MS);
     const entries = await strapi.db.query(HAPPY_BIRTHDAY_UID).findMany({
       where: {
         publishedAt: { $notNull: true },
+        createdAt: { $lte: createdAtCutoff },
         ...(nonExpiringRoutes.length
           ? { customroute: { $notIn: nonExpiringRoutes } }
           : {}),
-        $or: [
-          { expiresAt: { $notNull: true, $lte: now } },
-          { expiresAt: { $null: true }, createdAt: { $lte: legacyCutoff } },
-        ],
       },
       select: ['documentId', 'customroute', 'locale'],
       orderBy: { createdAt: 'asc' },
@@ -80,7 +74,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
       failed: 0,
       routes: [],
       expiredAtOrBefore: now.toISOString(),
-      legacyCreatedBefore: legacyCutoff.toISOString(),
+      legacyCreatedBefore: createdAtCutoff.toISOString(),
     };
 
     await forEachWithConcurrency(
