@@ -1,5 +1,7 @@
 'use strict';
 
+const HAPPY_BIRTHDAY_SCOPE = 'api::happy-birthday.happy-birthday';
+
 module.exports = {
   routes: [
     {
@@ -7,7 +9,9 @@ module.exports = {
       path: '/happy-birthdays/actions/unpublish-expired',
       handler: 'happy-birthday.unpublishExpired',
       config: {
-        auth: true,
+        auth: {
+          scope: [`${HAPPY_BIRTHDAY_SCOPE}.unpublishExpired`],
+        },
       },
     },
     {
@@ -15,7 +19,9 @@ module.exports = {
       path: '/happy-birthdays/:documentId/go-live',
       handler: 'happy-birthday.goLive',
       config: {
-        auth: true,
+        auth: {
+          scope: [`${HAPPY_BIRTHDAY_SCOPE}.goLive`],
+        },
       },
     },
   ],
