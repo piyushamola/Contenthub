@@ -1,0 +1,66 @@
+{
+  "kind": "collectionType",
+  "collectionName": "gift_products",
+  "info": {
+    "singularName": "gift-product",
+    "pluralName": "gift-products",
+    "displayName": "Gift Product",
+    "description": "Affiliate gift products (Amazon and other providers) shown on the gifts page, the celebration wizard preview, and attached blog posts"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "affiliateLink": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "provider": {
+      "type": "enumeration",
+      "enum": ["amazon", "other"],
+      "default": "amazon",
+      "required": true
+    },
+    "priceLabel": {
+      "type": "string"
+    },
+    "originalPriceLabel": {
+      "type": "string"
+    },
+    "badge": {
+      "type": "string"
+    },
+    "rating": {
+      "type": "decimal",
+      "min": 0,
+      "max": 5
+    },
+    "categories": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::gift-category.gift-category",
+      "mappedBy": "products"
+    },
+    "blogArticles": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::blog-article.blog-article",
+      "mappedBy": "relatedProducts"
+    }
+  }
+}

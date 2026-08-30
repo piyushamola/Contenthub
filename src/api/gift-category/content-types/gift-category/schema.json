@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "gift_categories",
+  "info": {
+    "singularName": "gift-category",
+    "pluralName": "gift-categories",
+    "displayName": "Gift Category",
+    "description": "Groupings of gift products (e.g. Love, Family, Luxury Gifts) used to curate the gifts page and the celebration wizard preview. Open a category and drag its Products relation to control the display order."
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "displayOrder": {
+      "type": "integer",
+      "default": 0
+    },
+    "products": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::gift-product.gift-product",
+      "inversedBy": "categories"
+    }
+  }
+}

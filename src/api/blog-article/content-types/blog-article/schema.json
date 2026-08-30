@@ -1,0 +1,82 @@
+{
+  "kind": "collectionType",
+  "collectionName": "blog_articles",
+  "info": {
+    "singularName": "blog-article",
+    "pluralName": "blog-articles",
+    "displayName": "Blog Article",
+    "description": "Blog posts for the birthday-celebration site (wishhappybdayto.me), replacing the previously hardcoded blog.json"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "title",
+      "required": true
+    },
+    "excerpt": {
+      "type": "text",
+      "maxLength": 300
+    },
+    "content": {
+      "type": "richtext",
+      "required": true
+    },
+    "featuredImage": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::blog-category.blog-category",
+      "inversedBy": "articles"
+    },
+    "tags": {
+      "type": "customField",
+      "customField": "plugin::tagsinput.tags",
+      "options": {
+        "label": "Tags"
+      }
+    },
+    "author": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::author-tp.author-tp"
+    },
+    "publishedDate": {
+      "type": "datetime"
+    },
+    "updatedDate": {
+      "type": "datetime"
+    },
+    "readingTime": {
+      "type": "integer",
+      "min": 1
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false
+    },
+    "seo": {
+      "type": "component",
+      "repeatable": false,
+      "component": "shared.seo"
+    },
+    "relatedProducts": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::gift-product.gift-product",
+      "inversedBy": "blogArticles"
+    }
+  }
+}
