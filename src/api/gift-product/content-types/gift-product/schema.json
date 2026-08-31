@@ -42,6 +42,15 @@
     "originalPriceLabel": {
       "type": "string"
     },
+    "price": {
+      "type": "decimal",
+      "min": 0
+    },
+    "priceCurrency": {
+      "type": "string",
+      "default": "INR",
+      "regex": "^[A-Z]{3}$"
+    },
     "badge": {
       "type": "string"
     },
