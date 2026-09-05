@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "payment_webhook_events",
+  "info": {
+    "singularName": "payment-webhook-event",
+    "pluralName": "payment-webhook-events",
+    "displayName": "Payment webhook event",
+    "description": "Deduplicated Razorpay webhook inbox"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "eventId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "eventType": {
+      "type": "string",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["received", "processed", "ignored", "failed"],
+      "required": true,
+      "default": "received"
+    },
+    "payload": {
+      "type": "json",
+      "required": false
+    },
+    "processedAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "lastError": {
+      "type": "text",
+      "required": false
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "kind": "collectionType",
+  "collectionName": "celebration_purchases",
+  "info": {
+    "singularName": "celebration-purchase",
+    "pluralName": "celebration-purchases",
+    "displayName": "Celebration purchase",
+    "description": "Razorpay purchase attempts for premium celebration exports"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "purchaseId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "celebrationDocumentId": {
+      "type": "string",
+      "required": true
+    },
+    "celebrationSlug": {
+      "type": "string",
+      "required": true
+    },
+    "receipt": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "razorpayOrderId": {
+      "type": "string",
+      "required": false,
+      "unique": true
+    },
+    "razorpayPaymentId": {
+      "type": "string",
+      "required": false,
+      "unique": true
+    },
+    "amountPaise": {
+      "type": "integer",
+      "required": true,
+      "min": 1
+    },
+    "currency": {
+      "type": "string",
+      "required": true,
+      "default": "INR"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["creating", "created", "paid", "failed", "refunded"],
+      "required": true,
+      "default": "creating"
+    },
+    "providerStatus": {
+      "type": "string",
+      "required": false
+    },
+    "purchasedAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "failureReason": {
+      "type": "text",
+      "required": false
+    }
+  }
+}

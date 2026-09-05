@@ -60,6 +60,27 @@
     "guestwishes": {
       "type": "json",
       "required": false
+    },
+    "expiresAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "premiumUnlocked": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "premiumPurchasedAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "premiumPurchaseId": {
+      "type": "string",
+      "required": false
+    },
+    "premiumPaymentId": {
+      "type": "string",
+      "required": false
     }
   }
 }

@@ -41,7 +41,8 @@ async function forEachWithConcurrency(items, concurrency, callback) {
 
 module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
   /**
-   * Unpublish celebrations created at least 24 hours ago.
+   * Unpublish celebrations after their explicit expiry, falling back to the
+   * original 24-hour lifetime for legacy/free entries.
    */
   async unpublishExpired() {
     const now = new Date();
@@ -49,12 +50,26 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
     const entries = await strapi.db.query(HAPPY_BIRTHDAY_UID).findMany({
       where: {
         publishedAt: { $notNull: true },
-        createdAt: { $lte: createdAtCutoff },
+        $or: [
+          { expiresAt: { $lte: now } },
+          {
+            $and: [
+              { expiresAt: { $null: true } },
+              { createdAt: { $lte: createdAtCutoff } },
+            ],
+          },
+        ],
         ...(nonExpiringRoutes.length
           ? { customroute: { $notIn: nonExpiringRoutes } }
           : {}),
       },
-      select: ['documentId', 'customroute', 'locale'],
+      select: [
+        'documentId',
+        'customroute',
+        'locale',
+        'createdAt',
+        'expiresAt',
+      ],
       orderBy: { createdAt: 'asc' },
     });
 
@@ -71,6 +86,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
       checked: targets.size,
       unpublished: 0,
       alreadyUnpublished: 0,
+      skippedActive: 0,
       failed: 0,
       routes: [],
       expiredAtOrBefore: now.toISOString(),
@@ -92,6 +108,19 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
 
           if (!published) {
             result.alreadyUnpublished += 1;
+            return;
+          }
+
+          // Re-read immediately before unpublishing so a concurrent update
+          // cannot make the cleanup decision from stale data.
+          const currentExpiry = Date.parse(published.expiresAt || '');
+          const legacyExpiry =
+            Date.parse(published.createdAt || '') + LIVE_DURATION_MS;
+          const effectiveExpiry = Number.isFinite(currentExpiry)
+            ? currentExpiry
+            : legacyExpiry;
+          if (Number.isFinite(effectiveExpiry) && effectiveExpiry > Date.now()) {
+            result.skippedActive += 1;
             return;
           }
 
