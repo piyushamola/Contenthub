@@ -34,6 +34,10 @@
       "type": "email",
       "required": true
     },
+    "country": {
+      "type": "string",
+      "required": false
+    },
     "birthdaymessages": {
       "type": "json",
       "required": true
