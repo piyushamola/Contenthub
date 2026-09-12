@@ -97,7 +97,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     );
     return {
       unlocked,
-      features: unlocked ? ['video', 'collage'] : [],
+      features: unlocked ? ['video', 'collage'] : ['collage'],
       expiresAt,
       amountPaise: AMOUNT_PAISE,
       currency: CURRENCY,
