@@ -6,7 +6,7 @@ const { createCoreService } = require('@strapi/strapi').factories;
 const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const WEBHOOK_UID = 'api::payment-webhook-event.payment-webhook-event';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
-const AMOUNT_PAISE = 2700;
+const AMOUNT_PAISE = 900;
 const CURRENCY = 'INR';
 const CELEBRATION_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEMO_SLUGS = new Set(
@@ -141,6 +141,12 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         throw new Error('This celebration has expired and the payment attempt cannot be reused');
       }
       if (existing.status === 'created' && existing.razorpayOrderId) {
+        if (
+          existing.amountPaise !== AMOUNT_PAISE ||
+          existing.currency !== CURRENCY
+        ) {
+          throw new Error('This payment attempt cannot be reused');
+        }
         return {
           purchaseId: existing.purchaseId,
           orderId: existing.razorpayOrderId,
