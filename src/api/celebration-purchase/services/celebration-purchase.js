@@ -6,8 +6,11 @@ const { createCoreService } = require('@strapi/strapi').factories;
 const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const WEBHOOK_UID = 'api::payment-webhook-event.payment-webhook-event';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
-const AMOUNT_PAISE = 900;
-const CURRENCY = 'INR';
+const DEFAULT_OFFER = { amountPaise: 900, currency: 'INR' };
+const ALLOWED_OFFERS = new Map([
+  ['INR', 900],
+  ['USD', 200],
+]);
 const CELEBRATION_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEMO_SLUGS = new Set(
   (process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || 'elena,matt,mike')
@@ -19,6 +22,18 @@ const PURCHASE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f
 
 function safeMessage(error) {
   return String(error?.message || error || 'Unknown payment error').slice(0, 1000);
+}
+
+function resolveOffer(amountPaise, currency) {
+  const normalizedCurrency = String(currency || '').trim().toUpperCase();
+  const normalizedAmount = Number(amountPaise);
+  if (
+    !Number.isInteger(normalizedAmount) ||
+    ALLOWED_OFFERS.get(normalizedCurrency) !== normalizedAmount
+  ) {
+    throw new Error('The requested keepsake offer is invalid');
+  }
+  return { amountPaise: normalizedAmount, currency: normalizedCurrency };
 }
 
 function toIsoFromUnix(value) {
@@ -99,8 +114,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       unlocked,
       features: unlocked ? ['video', 'collage'] : ['collage'],
       expiresAt,
-      amountPaise: AMOUNT_PAISE,
-      currency: CURRENCY,
+      amountPaise: DEFAULT_OFFER.amountPaise,
+      currency: DEFAULT_OFFER.currency,
     };
   },
 
@@ -110,10 +125,11 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     return this.accessFor(celebration);
   },
 
-  async createOrder({ slug, purchaseId }) {
+  async createOrder({ slug, purchaseId, amountPaise, currency }) {
     if (!PURCHASE_ID_PATTERN.test(String(purchaseId || ''))) {
       throw new Error('A valid purchase id is required');
     }
+    const offer = resolveOffer(amountPaise, currency);
 
     const celebration = await this.findCelebration(slug);
     if (!celebration) throw new Error('Celebration not found');
@@ -142,8 +158,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       }
       if (existing.status === 'created' && existing.razorpayOrderId) {
         if (
-          existing.amountPaise !== AMOUNT_PAISE ||
-          existing.currency !== CURRENCY
+          existing.amountPaise !== offer.amountPaise ||
+          existing.currency !== offer.currency
         ) {
           throw new Error('This payment attempt cannot be reused');
         }
@@ -165,8 +181,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         celebrationDocumentId: celebration.documentId,
         celebrationSlug: celebration.customroute,
         receipt,
-        amountPaise: AMOUNT_PAISE,
-        currency: CURRENCY,
+        amountPaise: offer.amountPaise,
+        currency: offer.currency,
         status: 'creating',
       },
     });
@@ -175,8 +191,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       const order = await this.razorpay('/orders', {
         method: 'POST',
         body: JSON.stringify({
-          amount: AMOUNT_PAISE,
-          currency: CURRENCY,
+          amount: offer.amountPaise,
+          currency: offer.currency,
           receipt,
           notes: {
             product: 'celebration_keepsake_v1',
@@ -196,8 +212,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         purchaseId,
         orderId: order.id,
         keyId: this.credentials.keyId,
-        amount: AMOUNT_PAISE,
-        currency: CURRENCY,
+        amount: offer.amountPaise,
+        currency: offer.currency,
       };
     } catch (error) {
       await strapi.db.query(PURCHASE_UID).update({
@@ -244,8 +260,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         celebrationSlug: purchase.celebrationSlug,
         features: [],
         expiresAt,
-        amountPaise: AMOUNT_PAISE,
-        currency: CURRENCY,
+        amountPaise: purchase.amountPaise,
+        currency: purchase.currency,
       };
     }
 
@@ -293,8 +309,8 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       celebrationSlug: purchase.celebrationSlug,
       features: ['video', 'collage'],
       expiresAt,
-      amountPaise: AMOUNT_PAISE,
-      currency: CURRENCY,
+      amountPaise: purchase.amountPaise,
+      currency: purchase.currency,
       duplicatePayment: Boolean(
         canonicalPaymentId && canonicalPaymentId !== payment.id,
       ),
@@ -368,9 +384,12 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     const access = await this.getAccess(purchase.celebrationSlug);
     return {
       status: purchase.status,
+      celebrationSlug: purchase.celebrationSlug,
       unlocked: Boolean(purchase.status === 'paid' && access?.unlocked),
       expired: Boolean(purchase.status === 'paid' && !access?.unlocked),
       expiresAt: access?.expiresAt || null,
+      amountPaise: purchase.amountPaise,
+      currency: purchase.currency,
     };
   },
 
