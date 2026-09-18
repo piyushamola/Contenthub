@@ -9,7 +9,7 @@ const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
 const DEFAULT_OFFER = { amountPaise: 900, currency: 'INR' };
 const ALLOWED_OFFERS = new Map([
   ['INR', 900],
-  ['USD', 200],
+  ['USD', 100],
 ]);
 const CELEBRATION_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEMO_SLUGS = new Set(
