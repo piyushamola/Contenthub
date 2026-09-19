@@ -17,16 +17,14 @@ module.exports = ({ env }) => ({
   //     },
   //   },
   // },
-  // email: {
-  //   config: {
-  //     provider: "sendgrid",
-  //     providerOptions: {
-  //       apiKey: env("SENDGRID_API_KEY"),
-  //     },
-  //     settings: {
-  //       defaultFrom: env("EMAIL_DEFAULT_FROM"),
-  //       defaultReplyTo: env("EMAIL_DEFAULT_REPLY_TO"),
-  //     },
-  //   },
-  // },
+  email: {
+    config: {
+      settings: {
+        // Format: "Sender Name <sender-email@domain.com>"
+        defaultFrom: "wishhappybday@gmail.com",
+        // Format: "Reply Name <reply-email@domain.com>" or "reply-email@domain.com"
+        defaultReplyTo: "wishhappybday@gmail.com",
+      },
+    },
+  },
 });

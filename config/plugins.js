@@ -27,4 +27,14 @@ module.exports = ({ env }) => ({
   // "strapi-plugin-ckeditor": {
   //   enabled: true,
   // },
+  email: {
+    config: {
+      settings: {
+        // Format: "Sender Name <sender-email@domain.com>"
+        defaultFrom: "wishhappybday@gmail.com",
+        // Format: "Reply Name <reply-email@domain.com>" or "reply-email@domain.com"
+        defaultReplyTo: "wishhappybday@gmail.com",
+      },
+    },
+  },
 });
