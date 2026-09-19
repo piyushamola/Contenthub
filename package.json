@@ -17,6 +17,7 @@
     "@strapi/plugin-cloud": "5.54.0",
     "@strapi/plugin-users-permissions": "5.54.0",
     "@strapi/provider-email-nodemailer": "5.54.0",
+    "@strapi/provider-email-sendgrid": "^5.54.0",
     "@strapi/strapi": "5.54.0",
     "better-sqlite3": "11.3.0",
     "fs-extra": "^10.0.0",
