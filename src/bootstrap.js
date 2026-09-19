@@ -11,17 +11,27 @@ const {
   about,
 } = require("../data/data.json");
 
-// --- START: New Email Sending Function ---
+const CELEBRATION_EMAIL_FROM = "Wish Happy Bday <wishhappybday@gmail.com>";
+const CELEBRATION_EMAIL_SUBJECT = "Your birthday celebration is ready";
+const CELEBRATION_SITE_ORIGIN = "https://www.wishhappybdayto.me";
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const getEmailService = () =>
+  strapi.plugin?.("email")?.service("email") ||
+  strapi.plugins?.email?.services?.email;
+
 const sendWelcomeEmail = async (email, name) => {
   try {
-    // Ensure the email plugin is available before attempting to send
-    if (
-      strapi.plugins &&
-      strapi.plugins.email &&
-      strapi.plugins.email.services &&
-      strapi.plugins.email.services.email
-    ) {
-      await strapi.plugins.email.services.email.send({
+    const emailService = getEmailService();
+    if (emailService) {
+      await emailService.send({
         to: email,
         subject: "Thanks for subscribing!",
         text: `Hi ${name || ""},\n\nThank you for subscribing to Time Pass!`,
@@ -32,14 +42,56 @@ const sendWelcomeEmail = async (email, name) => {
       strapi.log.info(`Welcome email sent to ${email}`);
     } else {
       strapi.log.error(
-        "Email plugin service not found. Make sure @strapi/plugin-email is installed and configured."
+        "Email plugin service not found. Make sure @strapi/plugin-email is installed and configured.",
       );
     }
   } catch (err) {
     strapi.log.error("Error sending welcome email:", err);
   }
 };
-// --- END: New Email Sending Function ---
+
+const sendCelebrationCreatedEmail = async ({
+  hostemail,
+  hostname,
+  personname,
+  customroute,
+}) => {
+  const emailService = getEmailService();
+  if (!emailService) {
+    strapi.log.error(
+      "Celebration confirmation email was not sent: email plugin service is unavailable.",
+    );
+    return;
+  }
+
+  const celebrationUrl = `${CELEBRATION_SITE_ORIGIN}/${encodeURIComponent(
+    customroute,
+  )}`;
+  const safeHostName = escapeHtml(hostname);
+  const safePersonName = escapeHtml(personname);
+
+  try {
+    await emailService.send({
+      to: hostemail,
+      from: CELEBRATION_EMAIL_FROM,
+      replyTo: CELEBRATION_EMAIL_FROM,
+      subject: CELEBRATION_EMAIL_SUBJECT,
+      text: `Hi ${hostname},\n\nYour celebration for ${personname} has been created successfully.\n\nView and share it here: ${celebrationUrl}`,
+      html: `<p>Hi ${safeHostName},</p>
+<p>Your celebration for <strong>${safePersonName}</strong> has been created successfully.</p>
+<p><a href="${celebrationUrl}">View celebration</a></p>`,
+    });
+    strapi.log.info(
+      `Celebration confirmation email sent for route "${customroute}".`,
+    );
+  } catch (error) {
+    // A notification failure must not roll back a celebration that is already created.
+    strapi.log.error(
+      `Celebration confirmation email failed for route "${customroute}":`,
+      error,
+    );
+  }
+};
 
 async function seedExampleApp() {
   const shouldImportSeedData = await isFirstRun();
@@ -55,7 +107,7 @@ async function seedExampleApp() {
     }
   } else {
     console.log(
-      "Seed data has already been imported. We cannot reimport unless you clear your database first."
+      "Seed data has already been imported. We cannot reimport unless you clear your database first.",
     );
   }
 }
@@ -189,7 +241,7 @@ async function updateBlocks(blocks) {
     } else if (block.__component === "shared.slider") {
       // Get files already uploaded to Strapi or upload new files
       const existingAndUploadedFiles = await checkFileExistsBeforeUpload(
-        block.files
+        block.files,
       );
       // Copy the block to not mutate directly
       const blockCopy = { ...block };
@@ -325,9 +377,30 @@ module.exports = async ({ strapi }) => {
       } else {
         strapi.log.warn(
           "Newsletter subscriber created without email. Skipping welcome email.",
-          result
+          result,
         );
       }
+    },
+  });
+
+  strapi.db.lifecycles.subscribe({
+    models: ["api::happy-birthday.happy-birthday"],
+    async afterCreate(event) {
+      const { result } = event;
+
+      if (
+        !result?.hostemail ||
+        !result?.hostname ||
+        !result?.personname ||
+        !result?.customroute
+      ) {
+        strapi.log.warn(
+          "Celebration created without the fields needed for a confirmation email. Skipping notification.",
+        );
+        return;
+      }
+
+      await sendCelebrationCreatedEmail(result);
     },
   });
 };
