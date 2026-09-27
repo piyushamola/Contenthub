@@ -6,11 +6,7 @@ const { createCoreService } = require('@strapi/strapi').factories;
 const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const WEBHOOK_UID = 'api::payment-webhook-event.payment-webhook-event';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
-const DEFAULT_OFFER = { amountPaise: 900, currency: 'INR' };
-const ALLOWED_OFFERS = new Map([
-  ['INR', 900],
-  ['USD', 100],
-]);
+const PRICING_UID = 'api::premium-pricing.premium-pricing';
 const CELEBRATION_DURATION_MS = 24 * 60 * 60 * 1000;
 const DEMO_SLUGS = new Set(
   (process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || 'elena,matt,mike')
@@ -24,16 +20,14 @@ function safeMessage(error) {
   return String(error?.message || error || 'Unknown payment error').slice(0, 1000);
 }
 
-function resolveOffer(amountPaise, currency) {
-  const normalizedCurrency = String(currency || '').trim().toUpperCase();
-  const normalizedAmount = Number(amountPaise);
-  if (
-    !Number.isInteger(normalizedAmount) ||
-    ALLOWED_OFFERS.get(normalizedCurrency) !== normalizedAmount
-  ) {
-    throw new Error('The requested keepsake offer is invalid');
-  }
-  return { amountPaise: normalizedAmount, currency: normalizedCurrency };
+function offerForCountry(country, prices) {
+  const currency = String(country || '').trim().toUpperCase() === 'IN' ? 'INR' : 'USD';
+  return { amountPaise: prices[currency], currency };
+}
+
+function billingCountry(celebration, fallbackCountry) {
+  const savedCountry = String(celebration?.country || '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(savedCountry) ? savedCountry : fallbackCountry;
 }
 
 function toIsoFromUnix(value) {
@@ -94,15 +88,17 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         'customroute',
         'createdAt',
         'expiresAt',
+        'country',
         'premiumUnlocked',
         'premiumPurchasedAt',
         'premiumPurchaseId',
         'premiumPaymentId',
       ],
+      populate: { owner: { select: ['id'] } },
     });
   },
 
-  accessFor(celebration) {
+  accessFor(celebration, prices, fallbackCountry) {
     const expiresAt = celebrationExpiresAt(celebration);
     const expiryMs = Date.parse(expiresAt || '');
     const unlocked = Boolean(
@@ -110,33 +106,41 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         Number.isFinite(expiryMs) &&
         expiryMs > Date.now(),
     );
+    const offer = offerForCountry(billingCountry(celebration, fallbackCountry), prices);
     return {
       unlocked,
       features: unlocked ? ['video', 'collage'] : ['collage'],
       expiresAt,
-      amountPaise: DEFAULT_OFFER.amountPaise,
-      currency: DEFAULT_OFFER.currency,
+      amountPaise: offer.amountPaise,
+      currency: offer.currency,
+      // Lets the Next.js layer recognize a logged-in owner as the host from
+      // any device, without a second round trip just to read this field.
+      ownerId: celebration?.owner?.id ?? null,
     };
   },
 
   async getAccess(slug) {
     const celebration = await this.findCelebration(slug);
     if (!celebration) return null;
-    return this.accessFor(celebration);
+    const prices = await strapi.service(PRICING_UID).currentPrices();
+    return this.accessFor(celebration, prices);
   },
 
-  async createOrder({ slug, purchaseId, amountPaise, currency }) {
+  async createOrder({ slug, purchaseId, country, ownerId }) {
+    const normalizedOwnerId = Number.isInteger(ownerId) ? ownerId : null;
     if (!PURCHASE_ID_PATTERN.test(String(purchaseId || ''))) {
       throw new Error('A valid purchase id is required');
     }
-    const offer = resolveOffer(amountPaise, currency);
-
     const celebration = await this.findCelebration(slug);
     if (!celebration) throw new Error('Celebration not found');
+    if (!normalizedOwnerId || celebration.owner?.id !== normalizedOwnerId) {
+      throw new Error('Only the logged-in creator can upgrade this celebration');
+    }
     if (DEMO_SLUGS.has(celebration.customroute.toLowerCase())) {
       throw new Error('Demo celebrations do not require payment');
     }
-    const access = this.accessFor(celebration);
+    const prices = await strapi.service(PRICING_UID).currentPrices();
+    const access = this.accessFor(celebration, prices, country);
     if (!access.expiresAt || Date.parse(access.expiresAt) <= Date.now()) {
       throw new Error('Celebration has expired');
     }
@@ -157,12 +161,6 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         throw new Error('This celebration has expired and the payment attempt cannot be reused');
       }
       if (existing.status === 'created' && existing.razorpayOrderId) {
-        if (
-          existing.amountPaise !== offer.amountPaise ||
-          existing.currency !== offer.currency
-        ) {
-          throw new Error('This payment attempt cannot be reused');
-        }
         return {
           purchaseId: existing.purchaseId,
           orderId: existing.razorpayOrderId,
@@ -174,6 +172,9 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       throw new Error('This payment attempt cannot be reused');
     }
 
+    // Only new orders use the latest Strapi price. A Razorpay order that
+    // already exists keeps the amount recorded when it was created.
+    const offer = offerForCountry(billingCountry(celebration, country), prices);
     const receipt = `whb_${purchaseId.replace(/-/g, '').slice(0, 28)}`;
     await strapi.db.query(PURCHASE_UID).create({
       data: {
@@ -184,6 +185,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         amountPaise: offer.amountPaise,
         currency: offer.currency,
         status: 'creating',
+        owner: normalizedOwnerId,
       },
     });
 
@@ -235,7 +237,29 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         'premiumPaymentId',
       ],
     });
-    if (!celebrationBeforeGrant) throw new Error('Celebration not found');
+    if (!celebrationBeforeGrant) {
+      await strapi.db.query(PURCHASE_UID).update({
+        where: { purchaseId: purchase.purchaseId },
+        data: {
+          razorpayPaymentId: payment.id,
+          providerStatus: payment.status,
+          status: 'paid',
+          purchasedAt,
+          failureReason:
+            'Payment captured after the celebration was deleted; review for refund',
+        },
+      });
+      return {
+        status: 'paid',
+        unlocked: false,
+        expired: true,
+        celebrationSlug: purchase.celebrationSlug,
+        features: [],
+        expiresAt: null,
+        amountPaise: purchase.amountPaise,
+        currency: purchase.currency,
+      };
+    }
     const expiresAt = celebrationExpiresAt(celebrationBeforeGrant);
     const celebrationActive = Boolean(
       expiresAt && Date.parse(expiresAt) > Date.now(),
@@ -495,8 +519,12 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       await strapi.db.query(WEBHOOK_UID).update({
         where: { eventId },
         data: {
-          status: result.ignored ? 'ignored' : 'processed',
-          processedAt: new Date().toISOString(),
+          status: result.pending
+            ? 'received'
+            : result.ignored
+              ? 'ignored'
+              : 'processed',
+          processedAt: result.pending ? null : new Date().toISOString(),
           lastError: null,
         },
       });
@@ -508,5 +536,86 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       });
       throw error;
     }
+  },
+
+  /** Retry captured payments and webhook events missed by a request worker. */
+  async reconcilePending() {
+    const now = Date.now();
+    const purchases = await strapi.db.query(PURCHASE_UID).findMany({
+      where: {
+        status: 'created',
+        razorpayOrderId: { $notNull: true },
+        createdAt: {
+          $gte: new Date(now - 48 * 60 * 60 * 1000),
+          $lte: new Date(now - 2 * 60 * 1000),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      limit: 50,
+    });
+    const events = await strapi.db.query(WEBHOOK_UID).findMany({
+      where: { status: { $in: ['received', 'failed'] } },
+      orderBy: { createdAt: 'desc' },
+      limit: 50,
+    });
+    const result = { purchasesChecked: 0, eventsChecked: 0, failed: 0 };
+
+    for (const purchase of purchases) {
+      try {
+        await this.reconcileOrder(
+          purchase.razorpayOrderId,
+          purchase.razorpayPaymentId,
+        );
+        result.purchasesChecked += 1;
+      } catch (error) {
+        result.failed += 1;
+        strapi.log.error(
+          `Payment recovery failed for ${purchase.purchaseId}: ${safeMessage(error)}`,
+        );
+      }
+    }
+
+    for (const event of events) {
+      const payload = event.payload || {};
+      try {
+        let outcome = { ignored: true };
+        if (
+          (event.eventType === 'payment.captured' ||
+            event.eventType === 'order.paid') &&
+          payload.orderId
+        ) {
+          outcome = await this.reconcileOrder(payload.orderId, payload.paymentId);
+        } else if (
+          event.eventType === 'refund.processed' &&
+          payload.refundPaymentId
+        ) {
+          outcome = await this.revokeRefundedPayment(payload.refundPaymentId);
+        }
+        await strapi.db.query(WEBHOOK_UID).update({
+          where: { eventId: event.eventId },
+          data: {
+            status: outcome.pending
+              ? 'received'
+              : outcome.ignored
+                ? 'ignored'
+                : 'processed',
+            processedAt: outcome.pending ? null : new Date().toISOString(),
+            lastError: null,
+          },
+        });
+        result.eventsChecked += 1;
+      } catch (error) {
+        result.failed += 1;
+        await strapi.db.query(WEBHOOK_UID).update({
+          where: { eventId: event.eventId },
+          data: { status: 'failed', lastError: safeMessage(error) },
+        });
+        strapi.log.error(
+          `Webhook recovery failed for ${event.eventId}: ${safeMessage(error)}`,
+        );
+      }
+    }
+
+    return result;
   },
 }));

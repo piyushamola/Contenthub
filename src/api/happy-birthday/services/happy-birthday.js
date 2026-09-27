@@ -40,16 +40,25 @@ async function forEachWithConcurrency(items, concurrency, callback) {
 }
 
 module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
-  /**
-   * Unpublish celebrations after their explicit expiry, falling back to the
-   * original 24-hour lifetime for legacy/free entries.
-   */
+  /** Remove public access while retaining the draft and its uploaded media. */
+  async unpublishCelebration(documentId) {
+    const published = await strapi.db.query(HAPPY_BIRTHDAY_UID).findOne({
+      where: { documentId, publishedAt: { $notNull: true } },
+      select: ['documentId', 'customroute'],
+    });
+    if (!published) return null;
+
+    const result = await strapi.documents(HAPPY_BIRTHDAY_UID).unpublish({ documentId });
+    if (Array.isArray(result?.entries) && result.entries.length === 0) return null;
+    return { documentId, customroute: published.customroute };
+  },
+
+  /** Unpublish expired celebrations, retaining their draft content and photos. */
   async unpublishExpired() {
     const now = new Date();
     const createdAtCutoff = new Date(now.getTime() - LIVE_DURATION_MS);
     const entries = await strapi.db.query(HAPPY_BIRTHDAY_UID).findMany({
       where: {
-        publishedAt: { $notNull: true },
         $or: [
           { expiresAt: { $lte: now } },
           {
@@ -59,6 +68,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
             ],
           },
         ],
+        publishedAt: { $notNull: true },
         ...(nonExpiringRoutes.length
           ? { customroute: { $notIn: nonExpiringRoutes } }
           : {}),
@@ -66,20 +76,16 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
       select: [
         'documentId',
         'customroute',
-        'locale',
         'createdAt',
         'expiresAt',
       ],
       orderBy: { createdAt: 'asc' },
     });
 
-    // Strapi can return one row per locale/version. De-duplicate before
-    // mutating so duplicate or overlapping cron invocations stay idempotent.
     const targets = new Map();
     for (const entry of entries) {
       if (!entry.documentId) continue;
-      const localeKey = entry.locale || '';
-      targets.set(`${entry.documentId}:${localeKey}`, entry);
+      targets.set(entry.documentId, entry);
     }
 
     const result = {
@@ -97,25 +103,24 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
       Array.from(targets.values()),
       CLEANUP_CONCURRENCY,
       async (target) => {
-        const params = { documentId: target.documentId };
-        if (target.locale) params.locale = target.locale;
-
         try {
-          const published = await strapi.documents(HAPPY_BIRTHDAY_UID).findOne({
-            ...params,
-            status: 'published',
+          const current = await strapi.db.query(HAPPY_BIRTHDAY_UID).findOne({
+            where: {
+              documentId: target.documentId,
+              publishedAt: { $notNull: true },
+            },
           });
 
-          if (!published) {
+          if (!current) {
             result.alreadyUnpublished += 1;
             return;
           }
 
           // Re-read immediately before unpublishing so a concurrent update
           // cannot make the cleanup decision from stale data.
-          const currentExpiry = Date.parse(published.expiresAt || '');
+          const currentExpiry = Date.parse(current.expiresAt || '');
           const legacyExpiry =
-            Date.parse(published.createdAt || '') + LIVE_DURATION_MS;
+            Date.parse(current.createdAt || '') + LIVE_DURATION_MS;
           const effectiveExpiry = Number.isFinite(currentExpiry)
             ? currentExpiry
             : legacyExpiry;
@@ -124,34 +129,13 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
             return;
           }
 
-          const unpublishResult = await strapi
-            .documents(HAPPY_BIRTHDAY_UID)
-            .unpublish(params);
-          if (
-            Array.isArray(unpublishResult?.entries) &&
-            unpublishResult.entries.length === 0
-          ) {
-            result.alreadyUnpublished += 1;
-          } else {
+          const unpublished = await this.unpublishCelebration(target.documentId);
+          if (!unpublished) result.alreadyUnpublished += 1;
+          else {
             result.unpublished += 1;
-            if (target.customroute) result.routes.push(target.customroute);
+            if (unpublished.customroute) result.routes.push(unpublished.customroute);
           }
         } catch (error) {
-          // Another invocation may have unpublished this document after our
-          // findOne call. Treat that race as an idempotent success.
-          try {
-            const stillPublished = await strapi
-              .documents(HAPPY_BIRTHDAY_UID)
-              .findOne({ ...params, status: 'published' });
-
-            if (!stillPublished) {
-              result.alreadyUnpublished += 1;
-              return;
-            }
-          } catch {
-            // Preserve the original mutation error below.
-          }
-
           result.failed += 1;
           strapi.log.error(
             `Failed to unpublish celebration ${target.documentId}: ${errorMessage(
@@ -166,7 +150,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
 
     if (result.unpublished || result.failed) {
       strapi.log.info(
-        `Expired celebration cleanup checked ${result.checked}, unpublished ${result.unpublished}, and failed ${result.failed}.`
+        `Celebration expiry checked ${result.checked}, unpublished ${result.unpublished}, and failed ${result.failed}.`
       );
     }
 

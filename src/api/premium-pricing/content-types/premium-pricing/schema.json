@@ -1,0 +1,27 @@
+{
+  "kind": "singleType",
+  "collectionName": "premium_pricings",
+  "info": {
+    "singularName": "premium-pricing",
+    "pluralName": "premium-pricings",
+    "displayName": "Premium pricing",
+    "description": "One price for India and one price for all other countries"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "indiaPriceRupees": {
+      "type": "decimal",
+      "required": true,
+      "min": 0.01,
+      "default": 9
+    },
+    "otherCountriesPriceUsd": {
+      "type": "decimal",
+      "required": true,
+      "min": 0.01,
+      "default": 1
+    }
+  }
+}

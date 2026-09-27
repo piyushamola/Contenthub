@@ -71,6 +71,11 @@
     "failureReason": {
       "type": "text",
       "required": false
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     }
   }
 }

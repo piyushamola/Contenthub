@@ -123,6 +123,208 @@ async function isFirstRun() {
   return !initHasRun;
 }
 
+/**
+ * Creates a custom "Admin" users-permissions role (distinct from Strapi's
+ * own Admin Panel users/roles) the first time the app boots. It starts as a
+ * clone of the "Authenticated" role's permissions so admin users keep every
+ * capability a normal logged-in user has; admin-only dashboard endpoints are
+ * additionally gated in code via the `is-admin` / `is-owner-or-admin`
+ * policies, which check `role.type === "admin"` directly.
+ *
+ * Promote a specific user to this role from:
+ * Strapi Admin Panel -> Users & Permissions -> Users -> select user -> Role.
+ */
+async function ensureAdminRole() {
+  const existingAdminRole = await strapi
+    .query('plugin::users-permissions.role')
+    .findOne({ where: { type: 'admin' } });
+  if (existingAdminRole) return;
+
+  const authenticatedRole = await strapi
+    .query('plugin::users-permissions.role')
+    .findOne({ where: { type: 'authenticated' } });
+
+  const adminRole = await strapi.query('plugin::users-permissions.role').create({
+    data: {
+      name: 'Admin',
+      description:
+        'Can view, pause, and delete every celebration across all users in the WishHappyBday dashboard.',
+      type: 'admin',
+    },
+  });
+
+  if (!authenticatedRole) return;
+
+  const authenticatedPermissions = await strapi
+    .query('plugin::users-permissions.permission')
+    .findMany({ where: { role: authenticatedRole.id } });
+
+  await Promise.all(
+    authenticatedPermissions.map((permission) =>
+      strapi.query('plugin::users-permissions.permission').create({
+        data: { action: permission.action, role: adminRole.id },
+      }),
+    ),
+  );
+
+  strapi.log.info(
+    'Created the "Admin" users-permissions role. Assign it to trusted users from the Strapi admin panel.',
+  );
+}
+
+/**
+ * Strapi's users-permissions plugin blocks every custom controller action
+ * for a role until a matching `plugin::users-permissions.permission` row
+ * exists for it — this check happens before our own `is-owner-or-admin` /
+ * `is-admin` policies ever run. Grants here are the "can this role call this
+ * route at all" layer; the policies remain the "does this specific record
+ * belong to this specific user" layer. Idempotent: safe to run every boot.
+ */
+async function ensureRolePermissions(roleType, controller, actions) {
+  const role = await strapi
+    .query('plugin::users-permissions.role')
+    .findOne({ where: { type: roleType } });
+  if (!role) return;
+
+  for (const action of actions) {
+    const actionName = `api::${controller}.${controller}.${action}`;
+    const existing = await strapi
+      .query('plugin::users-permissions.permission')
+      .findOne({ where: { action: actionName, role: role.id } });
+    if (existing) continue;
+
+    await strapi.query('plugin::users-permissions.permission').create({
+      data: { action: actionName, role: role.id },
+    });
+  }
+}
+
+/**
+ * Strapi's /api/auth/forgot-password endpoint does not accept a redirect URL
+ * per request — it always links to the single URL configured here (plugin
+ * store, same value shown in the admin panel under Settings -> Users &
+ * Permissions Plugin -> Advanced Settings -> "Reset password page"). Only
+ * sets it when empty so a value configured by hand (e.g. for production) is
+ * never overwritten.
+ */
+async function ensureResetPasswordPageUrl() {
+  const store = strapi.store({
+    type: 'plugin',
+    name: 'users-permissions',
+    key: 'advanced',
+  });
+  const settings = await store.get();
+  if (settings?.email_reset_password) return;
+
+  await store.set({
+    value: {
+      ...settings,
+      email_reset_password:
+        process.env.FRONTEND_RESET_PASSWORD_URL ||
+        'http://localhost:3000/reset-password',
+    },
+  });
+  strapi.log.info(
+    'Set the users-permissions "Reset password page" URL for local development. Update it in the Strapi admin panel before deploying to production.',
+  );
+}
+
+/**
+ * Strapi's Google provider only requests the `email` scope by default,
+ * which means Google never returns the person's name — every Google
+ * sign-up then falls back to an email-derived username with no real display
+ * name. Requesting `profile` too (Google's standard scope for basic profile
+ * info: name, picture) fixes this at the source. Idempotent and safe to run
+ * even before Google credentials are configured.
+ */
+async function ensureGoogleOAuthScope() {
+  const store = strapi.store({
+    type: 'plugin',
+    name: 'users-permissions',
+    key: 'grant',
+  });
+  const grant = await store.get();
+  if (!grant?.google) return;
+
+  const currentScope = Array.isArray(grant.google.scope) ? grant.google.scope : [];
+  const hasProfile = currentScope.includes('profile');
+  if (hasProfile) return;
+
+  await store.set({
+    value: { ...grant, google: { ...grant.google, scope: [...currentScope, 'profile'] } },
+  });
+  strapi.log.info('Added the "profile" scope to the Google OAuth provider so sign-ups get a real name.');
+}
+
+/**
+ * The built-in Google provider's `authCallback` (in
+ * @strapi/plugin-users-permissions/server/src/services/providers-registry.js)
+ * calls Google's token-introspection endpoint (`/tokeninfo`), which only
+ * ever returns `email` + `email_verified` — never a name, no matter which
+ * OAuth scopes are granted. It hard-codes `username: body.email.split('@')[0]`.
+ * That is the actual reason Google sign-ups never got a real display name,
+ * not the scope alone (`ensureGoogleOAuthScope` above is still needed so
+ * Google agrees to grant profile info at all).
+ *
+ * This overrides just that one provider's `authCallback` to call Google's
+ * real userinfo endpoint instead, which does return `name` when the
+ * `profile` scope was granted, and uses it as the new user's username (the
+ * best available "display name" for a first-time Google sign-up — the user
+ * can still rename themselves afterwards from /dashboard).
+ */
+async function ensureGoogleProfileAuthCallback() {
+  const providersRegistry = strapi.plugin('users-permissions').service('providers-registry');
+  const existing = providersRegistry.get('google') || {};
+
+  providersRegistry.add('google', {
+    ...existing,
+    enabled: true,
+    icon: 'google',
+    grantConfig: {
+      ...(existing.grantConfig || {}),
+      scope: ['email', 'profile'],
+    },
+    async authCallback({ accessToken }) {
+      const response = await fetch(
+        `https://openidconnect.googleapis.com/v1/userinfo?access_token=${encodeURIComponent(accessToken)}`,
+      );
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok || !body.email) {
+        throw new Error('Email was not available from Google');
+      }
+      if (body.email_verified === false) {
+        throw new Error('Email not verified by Google');
+      }
+
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      return {
+        username: name || body.email.split('@')[0],
+        email: body.email,
+      };
+    },
+  });
+}
+
+async function ensureDashboardPermissions() {
+  // Any logged-in user can call these; the `is-owner-or-admin` policy
+  // restricts each one to the caller's own celebrations (or an admin).
+  await ensureRolePermissions('authenticated', 'happy-birthday', [
+    'mine',
+    'pause',
+    'resume',
+    'deleteCelebration',
+  ]);
+  // The custom Admin role additionally gets the "every celebration" view.
+  await ensureRolePermissions('admin', 'happy-birthday', [
+    'mine',
+    'pause',
+    'resume',
+    'deleteCelebration',
+    'all',
+  ]);
+}
+
 async function setPublicPermissions(newPermissions) {
   // Find the ID of the public role
   const publicRole = await strapi
@@ -364,6 +566,12 @@ async function main() {
 module.exports = async ({ strapi }) => {
   // Run your existing seed data function
   await seedExampleApp();
+
+  await ensureAdminRole();
+  await ensureDashboardPermissions();
+  await ensureResetPasswordPageUrl();
+  await ensureGoogleOAuthScope();
+  await ensureGoogleProfileAuthCallback();
 
   // Register the lifecycle hook for newsletter-subscriber
   strapi.db.lifecycles.subscribe({

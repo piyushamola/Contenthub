@@ -85,6 +85,17 @@
     "premiumPaymentId": {
       "type": "string",
       "required": false
+    },
+    "celebrationStatus": {
+      "type": "enumeration",
+      "enum": ["active", "paused"],
+      "required": true,
+      "default": "active"
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     }
   }
 }
