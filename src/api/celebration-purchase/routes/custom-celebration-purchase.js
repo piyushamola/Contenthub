@@ -7,6 +7,12 @@ module.exports = {
   routes: [
     {
       method: 'GET',
+      path: '/celebration-payments/pricing',
+      handler: 'celebration-purchase.pricing',
+      config: { auth: { scope: [scope('access')] } },
+    },
+    {
+      method: 'GET',
       path: '/celebration-payments/access/:slug',
       handler: 'celebration-purchase.access',
       config: { auth: { scope: [scope('access')] } },

@@ -9,6 +9,10 @@ function message(error) {
 }
 
 module.exports = createCoreController(UID, ({ strapi }) => ({
+  async pricing(ctx) {
+    ctx.body = await strapi.service('api::premium-pricing.premium-pricing').currentPrices();
+  },
+
   async access(ctx) {
     const result = await strapi.service(UID).getAccess(ctx.params.slug);
     if (!result) return ctx.notFound('Celebration not found');
@@ -17,6 +21,10 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
 
   async createOrder(ctx) {
     try {
+      // Note: this route is authenticated with a server-only API token, so
+      // ctx.state.user is not populated here. When the creator is logged in,
+      // the trusted Next.js server includes `ownerId` in the request body
+      // (derived from its own verified session) and the service persists it.
       ctx.body = await strapi.service(UID).createOrder(ctx.request.body || {});
     } catch (error) {
       strapi.log.error(`Create celebration order failed: ${message(error)}`);
