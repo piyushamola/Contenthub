@@ -11,9 +11,11 @@ const {
   about,
 } = require("../data/data.json");
 
-const CELEBRATION_EMAIL_FROM = "Wish Happy Bday <wishhappybday@gmail.com>";
 const CELEBRATION_EMAIL_SUBJECT = "Your birthday celebration is ready";
-const CELEBRATION_SITE_ORIGIN = "https://www.wishhappybdayto.me";
+const SITE_ORIGIN = (process.env.FRONTEND_URL ||
+  (process.env.NODE_ENV === "production"
+    ? "https://www.wishhappybdayto.me"
+    : "http://localhost:3000")).replace(/\/$/, "");
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -64,7 +66,7 @@ const sendCelebrationCreatedEmail = async ({
     return;
   }
 
-  const celebrationUrl = `${CELEBRATION_SITE_ORIGIN}/${encodeURIComponent(
+  const celebrationUrl = `${SITE_ORIGIN}/${encodeURIComponent(
     customroute,
   )}`;
   const safeHostName = escapeHtml(hostname);
@@ -73,13 +75,17 @@ const sendCelebrationCreatedEmail = async ({
   try {
     await emailService.send({
       to: hostemail,
-      from: CELEBRATION_EMAIL_FROM,
-      replyTo: CELEBRATION_EMAIL_FROM,
       subject: CELEBRATION_EMAIL_SUBJECT,
-      text: `Hi ${hostname},\n\nYour celebration for ${personname} has been created successfully.\n\nView and share it here: ${celebrationUrl}`,
-      html: `<p>Hi ${safeHostName},</p>
-<p>Your celebration for <strong>${safePersonName}</strong> has been created successfully.</p>
-<p><a href="${celebrationUrl}">View celebration</a></p>`,
+      text: `Hi ${hostname},\n\nYour celebration for ${personname} is ready!\n\nView and share: ${celebrationUrl}\n\nManage your celebrations: ${SITE_ORIGIN}/dashboard\n\nWith love,\nWishHappyBday`,
+      html: `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f8f3ff;font-family:Arial,sans-serif;color:#302146">
+<table role="presentation" style="width:100%;max-width:560px;margin:auto;border-collapse:collapse;background:#fff;border-radius:20px;overflow:hidden">
+<tr><td style="padding:28px 36px;background:#7629bb;color:#fff;font-size:22px;font-weight:700">🎂 WishHappyBday</td></tr>
+<tr><td style="padding:36px"><p style="margin:0 0 16px;font-size:18px">Hi ${safeHostName},</p>
+<h1 style="margin:0 0 16px;font-size:28px;line-height:1.2">Your celebration is ready!</h1>
+<p style="font-size:16px;line-height:1.6">The birthday celebration for <strong>${safePersonName}</strong> is ready to share.</p>
+<p style="margin:28px 0"><a href="${celebrationUrl}" style="display:inline-block;padding:14px 24px;background:#7629bb;color:#fff;text-decoration:none;border-radius:30px;font-weight:700">View celebration</a></p>
+<p style="font-size:14px;line-height:1.6;color:#62546d">You can manage your celebrations from your <a href="${SITE_ORIGIN}/dashboard" style="color:#7629bb">dashboard</a>.</p>
+<p style="margin-top:28px;font-size:15px">With love,<br>WishHappyBday</p></td></tr></table></body></html>`,
     });
     strapi.log.info(
       `Celebration confirmation email sent for route "${customroute}".`,
@@ -200,33 +206,75 @@ async function ensureRolePermissions(roleType, controller, actions) {
 }
 
 /**
- * Strapi's /api/auth/forgot-password endpoint does not accept a redirect URL
- * per request — it always links to the single URL configured here (plugin
- * store, same value shown in the admin panel under Settings -> Users &
- * Permissions Plugin -> Advanced Settings -> "Reset password page"). Only
- * sets it when empty so a value configured by hand (e.g. for production) is
- * never overwritten.
+ * Keep confirmation and reset destinations aligned with the frontend. Strapi
+ * stores these settings in its plugin store, not in config/plugins.js.
  */
-async function ensureResetPasswordPageUrl() {
+async function ensureAuthEmailSettings() {
   const store = strapi.store({
     type: 'plugin',
     name: 'users-permissions',
     key: 'advanced',
   });
-  const settings = await store.get();
-  if (settings?.email_reset_password) return;
+  const settings = (await store.get()) || {};
+  const resetUrl = process.env.FRONTEND_RESET_PASSWORD_URL ||
+    `${SITE_ORIGIN}/reset-password`;
+  const confirmationRedirect = `${SITE_ORIGIN}/login?confirmed=1`;
+  if (settings.email_confirmation === true &&
+      settings.email_reset_password === resetUrl &&
+      settings.email_confirmation_redirection === confirmationRedirect) return;
 
   await store.set({
     value: {
       ...settings,
-      email_reset_password:
-        process.env.FRONTEND_RESET_PASSWORD_URL ||
-        'http://localhost:3000/reset-password',
+      email_confirmation: true,
+      email_reset_password: resetUrl,
+      email_confirmation_redirection: confirmationRedirect,
     },
   });
-  strapi.log.info(
-    'Set the users-permissions "Reset password page" URL for local development. Update it in the Strapi admin panel before deploying to production.',
-  );
+  strapi.log.info('Configured email confirmation and frontend auth email links.');
+}
+
+/** Install the branded defaults once; future edits in Strapi remain intact. */
+async function ensureAuthEmailTemplates() {
+  const store = strapi.store({
+    type: 'plugin',
+    name: 'users-permissions',
+    key: 'email',
+  });
+  const settings = await store.get();
+  if (!settings) return;
+
+  let changed = false;
+  const defaults = [
+    ['email_confirmation', 'confirmation.html', 'Confirm your WishHappyBday email', 'Thank you for registering!'],
+    ['reset_password', 'reset-password.html', 'Reset your WishHappyBday password', 'We heard that you lost your password.'],
+  ];
+  const configuredFrom = process.env.EMAIL_DEFAULT_FROM;
+  const address = configuredFrom?.match(/(?:<)?([^<>\s]+@[^<>\s]+)(?:>)?$/)?.[1];
+
+  for (const [key, filename, subject, stockText] of defaults) {
+    const options = settings[key]?.options;
+    if (!options) continue;
+
+    if (options.message?.includes(stockText)) {
+      options.message = fs.readFileSync(
+        path.join(process.cwd(), 'src', 'email-templates', filename),
+        'utf8',
+      );
+      options.object = subject;
+      changed = true;
+    }
+    if (address && options.from?.email !== address) {
+      options.from = { name: 'WishHappyBday', email: address };
+      options.response_email = process.env.EMAIL_DEFAULT_REPLY_TO || address;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await store.set({ value: settings });
+    strapi.log.info('Updated auth email templates and sender settings.');
+  }
 }
 
 /**
@@ -569,7 +617,8 @@ module.exports = async ({ strapi }) => {
 
   await ensureAdminRole();
   await ensureDashboardPermissions();
-  await ensureResetPasswordPageUrl();
+  await ensureAuthEmailSettings();
+  await ensureAuthEmailTemplates();
   await ensureGoogleOAuthScope();
   await ensureGoogleProfileAuthCallback();
 
@@ -593,7 +642,7 @@ module.exports = async ({ strapi }) => {
 
   strapi.db.lifecycles.subscribe({
     models: ["api::happy-birthday.happy-birthday"],
-    async afterCreate(event) {
+    afterCreate(event) {
       const { result } = event;
 
       if (
@@ -608,7 +657,13 @@ module.exports = async ({ strapi }) => {
         return;
       }
 
-      await sendCelebrationCreatedEmail(result);
+      // Return from the lifecycle immediately; SMTP latency cannot hold up
+      // celebration creation. Delivery errors are logged inside the sender.
+      setImmediate(() => {
+        void sendCelebrationCreatedEmail(result).catch((error) => {
+          strapi.log.error('Unexpected celebration email error:', error);
+        });
+      });
     },
   });
 };
