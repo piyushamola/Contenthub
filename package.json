@@ -4,6 +4,13 @@
   "private": true,
   "description": "A Strapi application",
   "scripts": {
+    "test": "npm run test:unit && npm run test:integration && npm run test:server",
+    "test:unit": "node scripts/run-check.cjs unit",
+    "test:integration": "node scripts/run-check.cjs integration",
+    "test:server": "node scripts/run-check.cjs server",
+    "test:birthday-story": "npm run test:integration",
+    "build:check": "node scripts/run-check.cjs build",
+    "check": "npm test && npm run build:check",
     "build": "strapi build",
     "deploy": "strapi deploy",
     "develop": "strapi develop",

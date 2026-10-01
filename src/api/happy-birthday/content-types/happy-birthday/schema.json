@@ -88,7 +88,10 @@
     },
     "celebrationStatus": {
       "type": "enumeration",
-      "enum": ["active", "paused"],
+      "enum": [
+        "active",
+        "paused"
+      ],
       "required": true,
       "default": "active"
     },
@@ -96,6 +99,48 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
+    },
+    "journeyType": {
+      "type": "enumeration",
+      "enum": [
+        "standard",
+        "story"
+      ],
+      "default": "standard"
+    },
+    "storyContent": {
+      "type": "json",
+      "private": true
+    },
+    "storyPublishedContent": {
+      "type": "json"
+    },
+    "storyAssets": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": [
+        "images",
+        "audios"
+      ],
+      "private": true
+    },
+    "storyAssetMetadata": {
+      "type": "json",
+      "private": true
+    },
+    "storyRevision": {
+      "type": "integer",
+      "default": 0
+    },
+    "storyPublishedRevision": {
+      "type": "integer",
+      "default": 0
+    },
+    "storyFirstPublishedAt": {
+      "type": "datetime"
+    },
+    "storyExpiredAt": {
+      "type": "datetime"
     }
   }
 }

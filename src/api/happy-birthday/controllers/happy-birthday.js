@@ -6,6 +6,8 @@
 
 const { createCoreController } = require('@strapi/strapi').factories;
 
+const isServerToken = require('../policies/story-server');
+const { isInternalStoryDraftLink } = require('../utils/birthday-story');
 const UID = 'api::happy-birthday.happy-birthday';
 
 const DASHBOARD_POPULATE = {
@@ -15,6 +17,12 @@ const DASHBOARD_POPULATE = {
 
 const DEFAULT_PAGE_SIZE = 5;
 const MAX_PAGE_SIZE = 50;
+const visibleDashboardRows = { $or: [
+  { journeyType: 'story', publishedAt: null },
+  { journeyType: { $ne: 'story' }, publishedAt: { $notNull: true } },
+  { journeyType: null, publishedAt: { $notNull: true } },
+] };
+
 
 function parsePagination(query = {}) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
@@ -58,6 +66,11 @@ function serializeForDashboard(entry) {
     documentId: entry.documentId,
     personname: entry.personname,
     customroute: entry.customroute,
+    // A Story draft needs a unique internal route in Strapi before its creator
+    // chooses a public link. Keep that implementation detail out of the UI.
+    storyLinkName: entry.journeyType === 'story'
+      ? isInternalStoryDraftLink(entry) ? '' : entry.storyContent?.slug || ''
+      : null,
     hostname: entry.hostname,
     hostemail: entry.hostemail,
     // Exposed as `status` in the API response for a simpler client shape,
@@ -68,6 +81,9 @@ function serializeForDashboard(entry) {
     status: entry.celebrationStatus || 'active',
     expiresAt: entry.expiresAt,
     premiumUnlocked: Boolean(entry.premiumUnlocked),
+    journeyType: entry.journeyType || 'standard',
+    storyState: entry.journeyType === 'story' ? (entry.storyExpiredAt || (entry.storyFirstPublishedAt && Date.parse(entry.expiresAt) <= Date.now()) ? 'expired' : entry.storyFirstPublishedAt ? 'active' : 'draft') : null,
+    hasUnpublishedChanges: entry.storyRevision !== entry.storyPublishedRevision,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     images: Array.isArray(entry.images) ? entry.images : [],
@@ -103,19 +119,50 @@ async function setCelebrationStatus(strapi, documentId, celebrationStatus) {
 }
 
 module.exports = createCoreController(UID, ({ strapi }) => ({
+  async find(ctx) {
+    if (!isServerToken(ctx)) {
+      ctx.query.filters = { $and: [ctx.query.filters || {}, { $or: [{ journeyType: { $ne: 'story' } }, { journeyType: null }] }] };
+    }
+    return super.find(ctx);
+  },
+  async findOne(ctx) {
+    if (!isServerToken(ctx)) {
+      const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });
+      if (story) return ctx.notFound('Celebration not found');
+    }
+    return super.findOne(ctx);
+  },
+  async create(ctx) {
+    if (!isServerToken(ctx) && Object.keys(ctx.request.body?.data || {}).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
+    return super.create(ctx);
+  },
+  async update(ctx) {
+    if (!isServerToken(ctx)) {
+      const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });
+      if (story || Object.keys(ctx.request.body?.data || {}).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
+    }
+    return super.update(ctx);
+  },
+  async delete(ctx) {
+    if (!isServerToken(ctx)) {
+      const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });
+      if (story) return ctx.forbidden('Use the Birthday Story dashboard');
+    }
+    return super.delete(ctx);
+  },
   async mine(ctx) {
     const userId = ctx.state.user?.id;
     if (!userId) return ctx.unauthorized('Login required');
 
     const { page, pageSize } = parsePagination(ctx.query);
-    const where = { owner: userId, publishedAt: { $notNull: true } };
+    const where = { owner: userId, ...visibleDashboardRows };
     ctx.body = await findDashboardPage(strapi, where, { page, pageSize });
   },
 
   async all(ctx) {
     const { page, pageSize, search } = parsePagination(ctx.query);
     const where = {
-      publishedAt: { $notNull: true },
+      ...visibleDashboardRows,
       ...(search ? { customroute: { $containsi: search } } : {}),
     };
     ctx.body = await findDashboardPage(strapi, where, { page, pageSize });

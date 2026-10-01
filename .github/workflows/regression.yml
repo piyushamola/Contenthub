@@ -1,0 +1,32 @@
+name: Regression safety
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regression-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-regression:
+    name: Backend regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit and isolated SQLite integration tests
+        run: npm test
+      - name: Production admin build with disposable configuration
+        run: npm run build:check

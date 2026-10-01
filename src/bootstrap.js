@@ -596,20 +596,6 @@ async function importSeedData() {
   await importAbout();
 }
 
-async function main() {
-  const { createStrapi, compileStrapi } = require("@strapi/strapi");
-
-  const appContext = await compileStrapi();
-  const app = await createStrapi(appContext).load();
-
-  app.log.level = "error";
-
-  await seedExampleApp();
-  await app.destroy();
-
-  process.exit(0);
-}
-
 // --- START: Modified module.exports ---
 module.exports = async ({ strapi }) => {
   // Run your existing seed data function
@@ -642,8 +628,15 @@ module.exports = async ({ strapi }) => {
 
   strapi.db.lifecycles.subscribe({
     models: ["api::happy-birthday.happy-birthday"],
-    afterCreate(event) {
+    async afterCreate(event) {
       const { result } = event;
+      if (result?.journeyType === 'story' && !result.publishedAt) return;
+      if (result?.journeyType === 'story') {
+        const purchase = await strapi.db.query('api::celebration-purchase.celebration-purchase').findOne({ where: { purchaseId: result.premiumPurchaseId }, select: ['status'] });
+        // Strapi creates a new published row on every update. Only the first
+        // payment publication should send the celebration-ready email.
+        if (purchase?.status === 'paid') return;
+      }
 
       if (
         !result?.hostemail ||

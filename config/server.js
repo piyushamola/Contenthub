@@ -9,6 +9,8 @@ module.exports = ({ env }) => {
   return {
     host: env('HOST', '0.0.0.0'),
     port: env.int('PORT', 1337),
+    // Used by Strapi to build Google OAuth and email-confirmation URLs.
+    url: env('PUBLIC_URL', ''),
     app: {
       keys: env.array('APP_KEYS'),
     },

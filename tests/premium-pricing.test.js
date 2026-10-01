@@ -77,6 +77,12 @@ test('new Razorpay orders use the saved price and existing orders retain theirs'
                 ...data,
               });
             },
+            updateMany: async ({ where, data }) => {
+              const current = purchases.get(where.purchaseId);
+              if (!current || current.status !== where.status) return { count: 0 };
+              purchases.set(where.purchaseId, { ...current, ...data });
+              return { count: 1 };
+            },
           };
         },
       },

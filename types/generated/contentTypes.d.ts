@@ -26,6 +26,11 @@ export interface AdminApiToken extends Struct.CollectionTypeSchema {
       Schema.Attribute.SetMinMaxLength<{
         minLength: 1;
       }>;
+    adminPermissions: Schema.Attribute.Relation<
+      'oneToMany',
+      'admin::permission'
+    >;
+    adminUserOwner: Schema.Attribute.Relation<'manyToOne', 'admin::user'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -34,7 +39,14 @@ export interface AdminApiToken extends Struct.CollectionTypeSchema {
         minLength: 1;
       }> &
       Schema.Attribute.DefaultTo<''>;
+    encryptedKey: Schema.Attribute.Text &
+      Schema.Attribute.SetMinMaxLength<{
+        minLength: 1;
+      }>;
     expiresAt: Schema.Attribute.DateTime;
+    kind: Schema.Attribute.Enumeration<['content-api', 'admin']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'content-api'>;
     lastUsedAt: Schema.Attribute.DateTime;
     lifespan: Schema.Attribute.BigInteger;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -52,7 +64,6 @@ export interface AdminApiToken extends Struct.CollectionTypeSchema {
     >;
     publishedAt: Schema.Attribute.DateTime;
     type: Schema.Attribute.Enumeration<['read-only', 'full-access', 'custom']> &
-      Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'read-only'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -130,6 +141,7 @@ export interface AdminPermission extends Struct.CollectionTypeSchema {
         minLength: 1;
       }>;
     actionParameters: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<{}>;
+    apiToken: Schema.Attribute.Relation<'manyToOne', 'admin::api-token'>;
     conditions: Schema.Attribute.JSON & Schema.Attribute.DefaultTo<[]>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -196,6 +208,64 @@ export interface AdminRole extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     users: Schema.Attribute.Relation<'manyToMany', 'admin::user'>;
+  };
+}
+
+export interface AdminSession extends Struct.CollectionTypeSchema {
+  collectionName: 'strapi_sessions';
+  info: {
+    description: 'Session Manager storage';
+    displayName: 'Session';
+    name: 'Session';
+    pluralName: 'sessions';
+    singularName: 'session';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+    i18n: {
+      localized: false;
+    };
+  };
+  attributes: {
+    absoluteExpiresAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
+    childId: Schema.Attribute.String & Schema.Attribute.Private;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    deviceId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    expiresAt: Schema.Attribute.DateTime &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'admin::session'> &
+      Schema.Attribute.Private;
+    metadata: Schema.Attribute.JSON & Schema.Attribute.Private;
+    origin: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    sessionId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private &
+      Schema.Attribute.Unique;
+    status: Schema.Attribute.String & Schema.Attribute.Private;
+    type: Schema.Attribute.String & Schema.Attribute.Private;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    userId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
   };
 }
 
@@ -324,6 +394,8 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
     };
   };
   attributes: {
+    apiTokens: Schema.Attribute.Relation<'oneToMany', 'admin::api-token'> &
+      Schema.Attribute.Private;
     blocked: Schema.Attribute.Boolean &
       Schema.Attribute.Private &
       Schema.Attribute.DefaultTo<false>;
@@ -360,6 +432,8 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
     publishedAt: Schema.Attribute.DateTime;
     registrationToken: Schema.Attribute.String & Schema.Attribute.Private;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
+    resetPasswordTokenExpiresAt: Schema.Attribute.DateTime &
+      Schema.Attribute.Private;
     roles: Schema.Attribute.Relation<'manyToMany', 'admin::role'> &
       Schema.Attribute.Private;
     updatedAt: Schema.Attribute.DateTime;
@@ -437,6 +511,180 @@ export interface ApiAuthorTpAuthorTp extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiBlogArticleBlogArticle extends Struct.CollectionTypeSchema {
+  collectionName: 'blog_articles';
+  info: {
+    description: 'Blog posts for the birthday-celebration site (wishhappybdayto.me), replacing the previously hardcoded blog.json';
+    displayName: 'Blog Article';
+    pluralName: 'blog-articles';
+    singularName: 'blog-article';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    author: Schema.Attribute.Relation<'oneToOne', 'api::author-tp.author-tp'>;
+    category: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::blog-category.blog-category'
+    >;
+    content: Schema.Attribute.RichText & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    excerpt: Schema.Attribute.Text &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 300;
+      }>;
+    featured: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    featuredImage: Schema.Attribute.Media<'images'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::blog-article.blog-article'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    publishedDate: Schema.Attribute.DateTime;
+    readingTime: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    relatedProducts: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::gift-product.gift-product'
+    >;
+    seo: Schema.Attribute.Component<'shared.seo', false>;
+    slug: Schema.Attribute.UID<'title'> & Schema.Attribute.Required;
+    tags: Schema.Attribute.JSON &
+      Schema.Attribute.CustomField<
+        'plugin::tagsinput.tags',
+        {
+          label: 'Tags';
+        }
+      >;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    updatedDate: Schema.Attribute.DateTime;
+  };
+}
+
+export interface ApiBlogCategoryBlogCategory
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'blog_categories';
+  info: {
+    description: 'Categories for blog articles (e.g. Gift Ideas, Birthday Wishes)';
+    displayName: 'Blog Category';
+    pluralName: 'blog-categories';
+    singularName: 'blog-category';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    articles: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::blog-article.blog-article'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::blog-category.blog-category'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiCelebrationPurchaseCelebrationPurchase
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'celebration_purchases';
+  info: {
+    description: 'Razorpay purchase attempts for premium celebration exports';
+    displayName: 'Celebration purchase';
+    pluralName: 'celebration-purchases';
+    singularName: 'celebration-purchase';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    amountPaise: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    celebrationDocumentId: Schema.Attribute.String & Schema.Attribute.Required;
+    celebrationSlug: Schema.Attribute.String & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    currency: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'INR'>;
+    failureReason: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::celebration-purchase.celebration-purchase'
+    > &
+      Schema.Attribute.Private;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    productType: Schema.Attribute.Enumeration<['premium', 'story']> &
+      Schema.Attribute.DefaultTo<'premium'>;
+    providerStatus: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    purchasedAt: Schema.Attribute.DateTime;
+    purchaseId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    razorpayOrderId: Schema.Attribute.String & Schema.Attribute.Unique;
+    razorpayPaymentId: Schema.Attribute.String & Schema.Attribute.Unique;
+    receipt: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    status: Schema.Attribute.Enumeration<
+      ['creating', 'created', 'paid', 'failed', 'refunded']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'creating'>;
+    storyOrderKey: Schema.Attribute.String &
+      Schema.Attribute.Private &
+      Schema.Attribute.Unique;
+    storyRevision: Schema.Attribute.Integer;
+    storySnapshot: Schema.Attribute.JSON & Schema.Attribute.Private;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCollapsibleCollapsible extends Struct.CollectionTypeSchema {
   collectionName: 'collapsibles';
   info: {
@@ -467,6 +715,110 @@ export interface ApiCollapsibleCollapsible extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     name: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiGiftCategoryGiftCategory
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'gift_categories';
+  info: {
+    description: 'Groupings of gift products (e.g. Love, Family, Luxury Gifts) used to curate the gifts page and the celebration wizard preview. Open a category and drag its Products relation to control the display order.';
+    displayName: 'Gift Category';
+    pluralName: 'gift-categories';
+    singularName: 'gift-category';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    displayOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    icon: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::gift-category.gift-category'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    products: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::gift-product.gift-product'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiGiftProductGiftProduct extends Struct.CollectionTypeSchema {
+  collectionName: 'gift_products';
+  info: {
+    description: 'Affiliate gift products (Amazon and other providers) shown on the gifts page, the celebration wizard preview, and attached blog posts';
+    displayName: 'Gift Product';
+    pluralName: 'gift-products';
+    singularName: 'gift-product';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    affiliateLink: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    badge: Schema.Attribute.String;
+    blogArticles: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::blog-article.blog-article'
+    >;
+    categories: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::gift-category.gift-category'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    image: Schema.Attribute.Media<'images'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::gift-product.gift-product'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    originalPriceLabel: Schema.Attribute.String;
+    price: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      >;
+    priceCurrency: Schema.Attribute.String & Schema.Attribute.DefaultTo<'INR'>;
+    priceLabel: Schema.Attribute.String;
+    provider: Schema.Attribute.Enumeration<['amazon', 'other']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'amazon'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 5;
+          min: 0;
+        },
+        number
+      >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -505,6 +857,175 @@ export interface ApiGlobalGlobal extends Struct.SingleTypeSchema {
   };
 }
 
+export interface ApiHappyBirthdayHappyBirthday
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'happy_birthdays';
+  info: {
+    description: '';
+    displayName: 'happy-birthday';
+    pluralName: 'happy-birthdays';
+    singularName: 'happy-birthday';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    birthdaymessages: Schema.Attribute.JSON & Schema.Attribute.Required;
+    celebrationStatus: Schema.Attribute.Enumeration<['active', 'paused']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'active'>;
+    country: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    customroute: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique &
+      Schema.Attribute.SetMinMaxLength<{
+        minLength: 3;
+      }>;
+    expiresAt: Schema.Attribute.DateTime;
+    guestwishes: Schema.Attribute.JSON;
+    hostemail: Schema.Attribute.Email & Schema.Attribute.Required;
+    hostname: Schema.Attribute.String & Schema.Attribute.Required;
+    images: Schema.Attribute.Media<
+      'images' | 'videos' | 'audios' | 'files',
+      true
+    >;
+    journeyType: Schema.Attribute.Enumeration<['standard', 'story']> &
+      Schema.Attribute.DefaultTo<'standard'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::happy-birthday.happy-birthday'
+    > &
+      Schema.Attribute.Private;
+    musicId: Schema.Attribute.String & Schema.Attribute.Required;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    personemail: Schema.Attribute.Email & Schema.Attribute.Required;
+    personname: Schema.Attribute.String & Schema.Attribute.Required;
+    premiumPaymentId: Schema.Attribute.String;
+    premiumPurchasedAt: Schema.Attribute.DateTime;
+    premiumPurchaseId: Schema.Attribute.String;
+    premiumUnlocked: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    publishedAt: Schema.Attribute.DateTime;
+    storyAssetMetadata: Schema.Attribute.JSON & Schema.Attribute.Private;
+    storyAssets: Schema.Attribute.Media<'images' | 'audios', true> &
+      Schema.Attribute.Private;
+    storyContent: Schema.Attribute.JSON & Schema.Attribute.Private;
+    storyExpiredAt: Schema.Attribute.DateTime;
+    storyFirstPublishedAt: Schema.Attribute.DateTime;
+    storyPublishedContent: Schema.Attribute.JSON;
+    storyPublishedRevision: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
+    storyRevision: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    templateId: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiNewsNews extends Struct.CollectionTypeSchema {
+  collectionName: 'news';
+  info: {
+    description: 'News articles and updates';
+    displayName: 'News';
+    pluralName: 'news-items';
+    singularName: 'news';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    author_tp: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::author-tp.author-tp'
+    >;
+    breadCrumb: Schema.Attribute.RichText &
+      Schema.Attribute.CustomField<
+        'plugin::ckeditor5.CKEditor',
+        {
+          preset: 'defaultHtml';
+        }
+      >;
+    canonicalUrl: Schema.Attribute.String;
+    collapsible: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::collapsible.collapsible'
+    >;
+    contentAfterToc: Schema.Attribute.RichText &
+      Schema.Attribute.CustomField<
+        'plugin::ckeditor5.CKEditor',
+        {
+          preset: 'defaultHtml';
+        }
+      >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    excerpt: Schema.Attribute.Text &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 300;
+      }>;
+    featuredImage: Schema.Attribute.Media<'images'>;
+    heroContent: Schema.Attribute.RichText &
+      Schema.Attribute.CustomField<
+        'plugin::ckeditor5.CKEditor',
+        {
+          preset: 'defaultHtml';
+        }
+      >;
+    isBreaking: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::news.news'> &
+      Schema.Attribute.Private;
+    metaDescription: Schema.Attribute.String;
+    metaTitle: Schema.Attribute.String;
+    priority: Schema.Attribute.UID;
+    publishedAt: Schema.Attribute.DateTime;
+    publishedDate: Schema.Attribute.DateTime;
+    readingTime: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 1;
+        },
+        number
+      >;
+    seoTags: Schema.Attribute.RichText &
+      Schema.Attribute.CustomField<
+        'plugin::ckeditor5.CKEditor',
+        {
+          preset: 'defaultHtml';
+        }
+      >;
+    slug: Schema.Attribute.UID<'title'> & Schema.Attribute.Required;
+    sub_vertical: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::sub-vertical.sub-vertical'
+    >;
+    tags: Schema.Attribute.JSON &
+      Schema.Attribute.CustomField<
+        'plugin::tagsinput.tags',
+        {
+          label: 'Tags';
+        }
+      >;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    titleDescription: Schema.Attribute.Text;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    url: Schema.Attribute.String & Schema.Attribute.Required;
+    vertical: Schema.Attribute.Relation<'oneToOne', 'api::vertical.vertical'>;
+    viewCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
 export interface ApiNewsletterSubscriberNewsletterSubscriber
   extends Struct.CollectionTypeSchema {
   collectionName: 'newsletter_subscribers';
@@ -533,6 +1054,117 @@ export interface ApiNewsletterSubscriberNewsletterSubscriber
     name: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     subscribed: Schema.Attribute.Boolean;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiPaymentWebhookEventPaymentWebhookEvent
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'payment_webhook_events';
+  info: {
+    description: 'Deduplicated Razorpay webhook inbox';
+    displayName: 'Payment webhook event';
+    pluralName: 'payment-webhook-events';
+    singularName: 'payment-webhook-event';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    eventId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    eventType: Schema.Attribute.String & Schema.Attribute.Required;
+    lastError: Schema.Attribute.Text;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::payment-webhook-event.payment-webhook-event'
+    > &
+      Schema.Attribute.Private;
+    payload: Schema.Attribute.JSON;
+    processedAt: Schema.Attribute.DateTime;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['received', 'processed', 'ignored', 'failed']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'received'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiPremiumPricingPremiumPricing
+  extends Struct.SingleTypeSchema {
+  collectionName: 'premium_pricings';
+  info: {
+    description: 'One price for India and one price for all other countries';
+    displayName: 'Premium pricing';
+    pluralName: 'premium-pricings';
+    singularName: 'premium-pricing';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    indiaPriceRupees: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<9>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::premium-pricing.premium-pricing'
+    > &
+      Schema.Attribute.Private;
+    otherCountriesPriceUsd: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<1>;
+    publishedAt: Schema.Attribute.DateTime;
+    storyIndiaPriceRupees: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<36>;
+    storyOtherCountriesPriceUsd: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<5>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -649,6 +1281,7 @@ export interface ApiSubVerticalSubVertical extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    url: Schema.Attribute.String & Schema.Attribute.Unique;
   };
 }
 
@@ -1032,12 +1665,13 @@ export interface PluginUploadFile extends Struct.CollectionTypeSchema {
     };
   };
   attributes: {
-    alternativeText: Schema.Attribute.String;
-    caption: Schema.Attribute.String;
+    alternativeText: Schema.Attribute.Text;
+    caption: Schema.Attribute.Text;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     ext: Schema.Attribute.String;
+    focalPoint: Schema.Attribute.JSON;
     folder: Schema.Attribute.Relation<'manyToOne', 'plugin::upload.folder'> &
       Schema.Attribute.Private;
     folderPath: Schema.Attribute.String &
@@ -1057,7 +1691,7 @@ export interface PluginUploadFile extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     mime: Schema.Attribute.String & Schema.Attribute.Required;
     name: Schema.Attribute.String & Schema.Attribute.Required;
-    previewUrl: Schema.Attribute.String;
+    previewUrl: Schema.Attribute.Text;
     provider: Schema.Attribute.String & Schema.Attribute.Required;
     provider_metadata: Schema.Attribute.JSON;
     publishedAt: Schema.Attribute.DateTime;
@@ -1066,7 +1700,7 @@ export interface PluginUploadFile extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    url: Schema.Attribute.String & Schema.Attribute.Required;
+    url: Schema.Attribute.Text & Schema.Attribute.Required;
     width: Schema.Attribute.Integer;
   };
 }
@@ -1239,6 +1873,7 @@ export interface PluginUsersPermissionsUser
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    displayName: Schema.Attribute.String;
     email: Schema.Attribute.Email &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMaxLength<{
@@ -1275,20 +1910,30 @@ export interface PluginUsersPermissionsUser
 }
 
 declare module '@strapi/strapi' {
-  export module Public {
+  export namespace Public {
     export interface ContentTypeSchemas {
       'admin::api-token': AdminApiToken;
       'admin::api-token-permission': AdminApiTokenPermission;
       'admin::permission': AdminPermission;
       'admin::role': AdminRole;
+      'admin::session': AdminSession;
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::about.about': ApiAboutAbout;
       'api::author-tp.author-tp': ApiAuthorTpAuthorTp;
+      'api::blog-article.blog-article': ApiBlogArticleBlogArticle;
+      'api::blog-category.blog-category': ApiBlogCategoryBlogCategory;
+      'api::celebration-purchase.celebration-purchase': ApiCelebrationPurchaseCelebrationPurchase;
       'api::collapsible.collapsible': ApiCollapsibleCollapsible;
+      'api::gift-category.gift-category': ApiGiftCategoryGiftCategory;
+      'api::gift-product.gift-product': ApiGiftProductGiftProduct;
       'api::global.global': ApiGlobalGlobal;
+      'api::happy-birthday.happy-birthday': ApiHappyBirthdayHappyBirthday;
+      'api::news.news': ApiNewsNews;
       'api::newsletter-subscriber.newsletter-subscriber': ApiNewsletterSubscriberNewsletterSubscriber;
+      'api::payment-webhook-event.payment-webhook-event': ApiPaymentWebhookEventPaymentWebhookEvent;
+      'api::premium-pricing.premium-pricing': ApiPremiumPricingPremiumPricing;
       'api::product-widget.product-widget': ApiProductWidgetProductWidget;
       'api::product.product': ApiProductProduct;
       'api::sub-vertical.sub-vertical': ApiSubVerticalSubVertical;
