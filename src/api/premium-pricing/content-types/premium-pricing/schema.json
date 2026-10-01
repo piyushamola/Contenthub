@@ -22,6 +22,18 @@
       "required": true,
       "min": 0.01,
       "default": 1
+    },
+    "storyIndiaPriceRupees": {
+      "type": "decimal",
+      "required": true,
+      "min": 0.01,
+      "default": 36
+    },
+    "storyOtherCountriesPriceUsd": {
+      "type": "decimal",
+      "required": true,
+      "min": 0.01,
+      "default": 5
     }
   }
 }

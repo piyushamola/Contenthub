@@ -7,7 +7,7 @@ const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const WEBHOOK_UID = 'api::payment-webhook-event.payment-webhook-event';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
 const PRICING_UID = 'api::premium-pricing.premium-pricing';
-const CELEBRATION_DURATION_MS = 24 * 60 * 60 * 1000;
+const { celebrationExpiresAt } = require('../../happy-birthday/utils/celebration-expiry');
 const DEMO_SLUGS = new Set(
   (process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || 'elena,matt,mike')
     .split(',')
@@ -37,17 +37,6 @@ function toIsoFromUnix(value) {
     : new Date().toISOString();
 }
 
-function celebrationExpiresAt(celebration) {
-  const explicitExpiry = Date.parse(celebration?.expiresAt || '');
-  if (Number.isFinite(explicitExpiry)) {
-    return new Date(explicitExpiry).toISOString();
-  }
-  const createdAt = Date.parse(celebration?.createdAt || '');
-  return Number.isFinite(createdAt)
-    ? new Date(createdAt + CELEBRATION_DURATION_MS).toISOString()
-    : null;
-}
-
 module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
   get credentials() {
     const keyId = process.env.RAZORPAY_KEY_ID;
@@ -62,6 +51,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     const { keyId, keySecret } = this.credentials;
     const response = await fetch(`https://api.razorpay.com/v1${path}`, {
       ...init,
+      signal: init.signal || AbortSignal.timeout(20_000),
       headers: {
         Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
         'Content-Type': 'application/json',
@@ -78,7 +68,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
   async findCelebration(slug) {
     const normalizedSlug = String(slug || '').trim().toLowerCase();
     if (!normalizedSlug) return null;
-    return strapi.db.query(CELEBRATION_UID).findOne({
+    const published = await strapi.db.query(CELEBRATION_UID).findOne({
       where: {
         customroute: { $eqi: normalizedSlug },
         publishedAt: { $notNull: true },
@@ -93,23 +83,29 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         'premiumPurchasedAt',
         'premiumPurchaseId',
         'premiumPaymentId',
+        'journeyType', 'storyFirstPublishedAt', 'storyExpiredAt',
       ],
       populate: { owner: { select: ['id'] } },
     });
+    if (published) return { ...published, storyIsPublished: true };
+    const draft = await strapi.service('api::happy-birthday.birthday-story').findBySlug(normalizedSlug);
+    return draft ? { ...draft, storyIsPublished: false } : null;
   },
 
   accessFor(celebration, prices, fallbackCountry) {
-    const expiresAt = celebrationExpiresAt(celebration);
+    const expiresAt = celebration.journeyType === 'story' ? celebration.expiresAt : celebrationExpiresAt(celebration);
     const expiryMs = Date.parse(expiresAt || '');
     const unlocked = Boolean(
       celebration?.premiumUnlocked &&
+        (celebration.journeyType !== 'story' || (celebration.storyIsPublished && !celebration.storyExpiredAt)) &&
         Number.isFinite(expiryMs) &&
         expiryMs > Date.now(),
     );
     const offer = offerForCountry(billingCountry(celebration, fallbackCountry), prices);
     return {
       unlocked,
-      features: unlocked ? ['video', 'collage'] : ['collage'],
+      features: celebration.journeyType === 'story' ? (unlocked ? ['video', 'pdf'] : []) : unlocked ? ['video', 'collage'] : ['collage'],
+      journeyType: celebration.journeyType || 'standard',
       expiresAt,
       amountPaise: offer.amountPaise,
       currency: offer.currency,
@@ -122,8 +118,13 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
   async getAccess(slug) {
     const celebration = await this.findCelebration(slug);
     if (!celebration) return null;
-    const prices = await strapi.service(PRICING_UID).currentPrices();
-    return this.accessFor(celebration, prices);
+    const prices = celebration.journeyType === 'story' ? await strapi.service(PRICING_UID).storySettings() : await strapi.service(PRICING_UID).currentPrices();
+    const access = this.accessFor(celebration, prices);
+    if (celebration.journeyType === 'story' && !access.unlocked) {
+      const pending = await strapi.db.query(PURCHASE_UID).findOne({ where: { celebrationDocumentId: celebration.documentId, productType: 'story', status: 'created' } });
+      if (pending) return { ...access, amountPaise: pending.amountPaise, currency: pending.currency };
+    }
+    return access;
   },
 
   async createOrder({ slug, purchaseId, country, ownerId }) {
@@ -139,16 +140,22 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     if (DEMO_SLUGS.has(celebration.customroute.toLowerCase())) {
       throw new Error('Demo celebrations do not require payment');
     }
-    const prices = await strapi.service(PRICING_UID).currentPrices();
+    const prices = celebration.journeyType === 'story' ? await strapi.service(PRICING_UID).storySettings() : await strapi.service(PRICING_UID).currentPrices();
     const access = this.accessFor(celebration, prices, country);
-    if (!access.expiresAt || Date.parse(access.expiresAt) <= Date.now()) {
+    if (celebration.storyExpiredAt || (celebration.journeyType !== 'story' && !access.expiresAt) || (access.expiresAt && Date.parse(access.expiresAt) <= Date.now())) {
       throw new Error('Celebration has expired');
     }
     if (access.unlocked) return { alreadyUnlocked: true, access };
 
-    const existing = await strapi.db.query(PURCHASE_UID).findOne({
-      where: { purchaseId },
-    });
+    let existing = celebration.journeyType === 'story'
+      ? await strapi.db.query(PURCHASE_UID).findOne({ where: { celebrationDocumentId: celebration.documentId, productType: 'story', status: { $in: ['creating', 'created', 'paid'] } }, orderBy: { createdAt: 'desc' } })
+      : await strapi.db.query(PURCHASE_UID).findOne({ where: { purchaseId } });
+    if (celebration.journeyType === 'story' && existing?.status === 'creating' && !existing.razorpayOrderId && Date.parse(existing.createdAt) < Date.now() - 120_000) {
+      // No checkout was returned to a browser. Recover a worker that stopped
+      // between claiming the attempt and recording the provider order.
+      const released = await strapi.db.query(PURCHASE_UID).updateMany({ where: { id: existing.id, status: 'creating', razorpayOrderId: null }, data: { status: 'failed', storyOrderKey: null, failureReason: 'Checkout preparation interrupted' } });
+      if (released.count) existing = null;
+    }
     if (existing) {
       if (existing.celebrationDocumentId !== celebration.documentId) {
         throw new Error('Purchase id belongs to another celebration');
@@ -169,25 +176,35 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
           currency: existing.currency,
         };
       }
-      throw new Error('This payment attempt cannot be reused');
+      throw new Error(existing.productType === 'story' ? 'Checkout is already being prepared. Please try again in a moment' : 'This payment attempt cannot be reused');
     }
 
     // Only new orders use the latest Strapi price. A Razorpay order that
     // already exists keeps the amount recorded when it was created.
+    if (celebration.journeyType === 'story' && celebration.storyFirstPublishedAt) throw new Error('This story cannot be republished');
+    const storyDraft = celebration.journeyType === 'story' ? await strapi.service('api::happy-birthday.birthday-story').owned(celebration.documentId, normalizedOwnerId) : null;
+    const storySnapshot = storyDraft ? await strapi.service('api::happy-birthday.birthday-story').snapshot(storyDraft) : null;
     const offer = offerForCountry(billingCountry(celebration, country), prices);
     const receipt = `whb_${purchaseId.replace(/-/g, '').slice(0, 28)}`;
-    await strapi.db.query(PURCHASE_UID).create({
+    try { await strapi.db.query(PURCHASE_UID).create({
       data: {
         purchaseId,
         celebrationDocumentId: celebration.documentId,
         celebrationSlug: celebration.customroute,
         receipt,
+        productType: storyDraft ? 'story' : 'premium',
+        // A database constraint also protects checkout across workers/tabs.
+        storyOrderKey: storyDraft ? celebration.documentId : null,
+        storySnapshot, storyRevision: storyDraft?.storyRevision ?? null,
         amountPaise: offer.amountPaise,
         currency: offer.currency,
         status: 'creating',
         owner: normalizedOwnerId,
       },
-    });
+    }); } catch (error) {
+      if (storyDraft && await strapi.db.query(PURCHASE_UID).findOne({ where: { storyOrderKey: celebration.documentId } })) throw new Error('Checkout is already being prepared. Please try again in a moment');
+      throw error;
+    }
 
     try {
       const order = await this.razorpay('/orders', {
@@ -197,19 +214,20 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
           currency: offer.currency,
           receipt,
           notes: {
-            product: 'celebration_keepsake_v1',
+            product: storyDraft ? 'birthday_story_v1' : 'celebration_keepsake_v1',
             celebration_id: celebration.documentId,
           },
         }),
       });
-      await strapi.db.query(PURCHASE_UID).update({
-        where: { purchaseId },
+      const savedOrder = await strapi.db.query(PURCHASE_UID).updateMany({
+        where: { purchaseId, status: 'creating' },
         data: {
           razorpayOrderId: order.id,
           providerStatus: order.status,
           status: 'created',
         },
       });
+      if (!savedOrder.count) throw new Error('This checkout was replaced. Please try again');
       return {
         purchaseId,
         orderId: order.id,
@@ -220,13 +238,21 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     } catch (error) {
       await strapi.db.query(PURCHASE_UID).update({
         where: { purchaseId },
-        data: { status: 'failed', failureReason: safeMessage(error) },
+        data: { status: 'failed', storyOrderKey: null, failureReason: safeMessage(error) },
       });
       throw error;
     }
   },
 
   async grantCapturedPurchase(purchase, payment) {
+    if (purchase.productType === 'story') {
+      const result = await strapi.service('api::happy-birthday.birthday-story').publishCaptured(purchase, payment);
+      await strapi.db.query(PURCHASE_UID).update({ where: { purchaseId: purchase.purchaseId }, data: {
+        razorpayPaymentId: payment.id, providerStatus: payment.status, status: 'paid', purchasedAt: toIsoFromUnix(payment.created_at),
+        failureReason: result.duplicatePayment ? 'Duplicate captured payment; review for refund' : result.expired ? 'Story no longer available; review for refund' : null,
+      } });
+      return result;
+    }
     const purchasedAt = toIsoFromUnix(payment.created_at);
     const celebrationBeforeGrant = await strapi.db.query(CELEBRATION_UID).findOne({
       where: { documentId: purchase.celebrationDocumentId },
@@ -473,6 +499,10 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         premiumUnlocked: false,
       },
     });
+    if (purchase.productType === 'story') {
+      await strapi.db.query(CELEBRATION_UID).updateMany({ where: { documentId: purchase.celebrationDocumentId }, data: { storyExpiredAt: new Date().toISOString() } });
+      await strapi.service(CELEBRATION_UID).unpublishCelebration(purchase.celebrationDocumentId);
+    }
     return { refunded: true, entitlementRevoked: true };
   },
 

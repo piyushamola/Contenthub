@@ -10,7 +10,8 @@ function message(error) {
 
 module.exports = createCoreController(UID, ({ strapi }) => ({
   async pricing(ctx) {
-    ctx.body = await strapi.service('api::premium-pricing.premium-pricing').currentPrices();
+    const pricing = strapi.service('api::premium-pricing.premium-pricing');
+    ctx.body = ctx.query.product === 'story' ? await pricing.storySettings() : await pricing.currentPrices();
   },
 
   async access(ctx) {

@@ -20,6 +20,15 @@ function toMinorUnits(value, label) {
 }
 
 module.exports = createCoreService(UID, ({ strapi }) => ({
+  async storySettings() {
+    const settings = await strapi.db.query(UID).findOne({
+      select: ['storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd'],
+    });
+    return {
+      INR: toMinorUnits(settings?.storyIndiaPriceRupees ?? 36, 'Story India price'),
+      USD: toMinorUnits(settings?.storyOtherCountriesPriceUsd ?? 5, 'Story other countries price'),
+    };
+  },
   async currentPrices() {
     const settings = await strapi.db.query(UID).findOne({
       select: ['indiaPriceRupees', 'otherCountriesPriceUsd'],

@@ -56,7 +56,13 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["creating", "created", "paid", "failed", "refunded"],
+      "enum": [
+        "creating",
+        "created",
+        "paid",
+        "failed",
+        "refunded"
+      ],
       "required": true,
       "default": "creating"
     },
@@ -76,6 +82,29 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
+    },
+    "productType": {
+      "type": "enumeration",
+      "enum": [
+        "premium",
+        "story"
+      ],
+      "default": "premium"
+    },
+    "storySnapshot": {
+      "type": "json",
+      "private": true
+    },
+    "storyRevision": {
+      "type": "integer"
+    },
+    "storyOrderKey": {
+      "type": "string",
+      "unique": true,
+      "column": {
+        "unique": true
+      },
+      "private": true
     }
   }
 }

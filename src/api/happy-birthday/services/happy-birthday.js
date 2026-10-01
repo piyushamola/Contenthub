@@ -7,7 +7,7 @@
 const { createCoreService } = require('@strapi/strapi').factories;
 
 const HAPPY_BIRTHDAY_UID = 'api::happy-birthday.happy-birthday';
-const LIVE_DURATION_MS = 24 * 60 * 60 * 1000;
+const { CELEBRATION_DURATION_MS } = require('../utils/celebration-expiry');
 const CLEANUP_CONCURRENCY = 5;
 const DEFAULT_NON_EXPIRING_ROUTES = 'elena,matt,mike';
 const nonExpiringRoutes = (
@@ -48,6 +48,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
     });
     if (!published) return null;
 
+    await strapi.db.query(HAPPY_BIRTHDAY_UID).updateMany({ where: { documentId, journeyType: 'story' }, data: { storyExpiredAt: new Date().toISOString() } });
     const result = await strapi.documents(HAPPY_BIRTHDAY_UID).unpublish({ documentId });
     if (Array.isArray(result?.entries) && result.entries.length === 0) return null;
     return { documentId, customroute: published.customroute };
@@ -56,7 +57,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
   /** Unpublish expired celebrations, retaining their draft content and photos. */
   async unpublishExpired() {
     const now = new Date();
-    const createdAtCutoff = new Date(now.getTime() - LIVE_DURATION_MS);
+    const createdAtCutoff = new Date(now.getTime() - CELEBRATION_DURATION_MS);
     const entries = await strapi.db.query(HAPPY_BIRTHDAY_UID).findMany({
       where: {
         $or: [
@@ -120,7 +121,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
           // cannot make the cleanup decision from stale data.
           const currentExpiry = Date.parse(current.expiresAt || '');
           const legacyExpiry =
-            Date.parse(current.createdAt || '') + LIVE_DURATION_MS;
+            Date.parse(current.createdAt || '') + CELEBRATION_DURATION_MS;
           const effectiveExpiry = Number.isFinite(currentExpiry)
             ? currentExpiry
             : legacyExpiry;
