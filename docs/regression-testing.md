@@ -23,6 +23,8 @@ The runner supports macOS and Linux (`/tmp` and `/dev/null`), including the Ubun
 
 ## What is protected
 
+- Celebration email delivery: draft rows send nothing; the first committed publication claims one persistent, uniquely keyed delivery. Updates, republishing and restart backfills cannot resend it. SMTP failures are recorded without automatic retries. Provider and auth-template Reply-To use `wishhappybday@gmail.com`. Covered by `tests/email-settings.test.js` and `tests/helpers/celebration-email-regression.cjs` in the existing integration gate.
+
 - Pricing conversion to payment units; new orders use current prices and existing orders keep the quoted price.
 - Checkout ownership, valid purchase IDs, demo/expired/deleted celebrations, and reuse of another celebration's payment attempt.
 - Payment signatures, provider capture status, order ownership, payment and order amount/currency checks.

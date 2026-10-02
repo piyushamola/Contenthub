@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "celebration_email_deliveries",
+  "info": {
+    "singularName": "celebration-email-delivery",
+    "pluralName": "celebration-email-deliveries",
+    "displayName": "Celebration email delivery"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
+  },
+  "attributes": {
+    "celebrationDocumentId": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "column": { "unique": true }
+    },
+    "deliveryStatus": {
+      "type": "enumeration",
+      "enum": ["claimed", "sent", "failed", "existing"],
+      "required": true
+    },
+    "sentAt": { "type": "datetime" }
+  }
+}

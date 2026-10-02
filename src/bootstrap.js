@@ -3,6 +3,8 @@
 const fs = require("fs-extra");
 const path = require("path");
 const mime = require("mime-types");
+const { REPLY_TO, applyAuthReplyTo } = require("./email/settings");
+const { sendOnce, rememberExistingPublications } = require("./email/celebration-delivery");
 const {
   categories,
   authors,
@@ -35,6 +37,7 @@ const sendWelcomeEmail = async (email, name) => {
     if (emailService) {
       await emailService.send({
         to: email,
+        replyTo: REPLY_TO,
         subject: "Thanks for subscribing!",
         text: `Hi ${name || ""},\n\nThank you for subscribing to Time Pass!`,
         html: `<p>Hi ${name || ""},</p>
@@ -63,7 +66,7 @@ const sendCelebrationCreatedEmail = async ({
     strapi.log.error(
       "Celebration confirmation email was not sent: email plugin service is unavailable.",
     );
-    return;
+    throw new Error("Email plugin service is unavailable");
   }
 
   const celebrationUrl = `${SITE_ORIGIN}/${encodeURIComponent(
@@ -75,6 +78,7 @@ const sendCelebrationCreatedEmail = async ({
   try {
     await emailService.send({
       to: hostemail,
+      replyTo: REPLY_TO,
       subject: CELEBRATION_EMAIL_SUBJECT,
       text: `Hi ${hostname},\n\nYour celebration for ${personname} is ready!\n\nView and share: ${celebrationUrl}\n\nManage your celebrations: ${SITE_ORIGIN}/dashboard\n\nWith love,\nWishHappyBday`,
       html: `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f8f3ff;font-family:Arial,sans-serif;color:#302146">
@@ -96,6 +100,7 @@ const sendCelebrationCreatedEmail = async ({
       `Celebration confirmation email failed for route "${customroute}":`,
       error,
     );
+    throw error;
   }
 };
 
@@ -234,7 +239,7 @@ async function ensureAuthEmailSettings() {
   strapi.log.info('Configured email confirmation and frontend auth email links.');
 }
 
-/** Install the branded defaults once; future edits in Strapi remain intact. */
+/** Preserve custom email copy and keep auth replies pointed at support. */
 async function ensureAuthEmailTemplates() {
   const store = strapi.store({
     type: 'plugin',
@@ -244,7 +249,7 @@ async function ensureAuthEmailTemplates() {
   const settings = await store.get();
   if (!settings) return;
 
-  let changed = false;
+  let changed = applyAuthReplyTo(settings);
   const defaults = [
     ['email_confirmation', 'confirmation.html', 'Confirm your WishHappyBday email', 'Thank you for registering!'],
     ['reset_password', 'reset-password.html', 'Reset your WishHappyBday password', 'We heard that you lost your password.'],
@@ -266,7 +271,6 @@ async function ensureAuthEmailTemplates() {
     }
     if (address && options.from?.email !== address) {
       options.from = { name: 'WishHappyBday', email: address };
-      options.response_email = process.env.EMAIL_DEFAULT_REPLY_TO || address;
       changed = true;
     }
   }
@@ -608,6 +612,8 @@ module.exports = async ({ strapi }) => {
   await ensureGoogleOAuthScope();
   await ensureGoogleProfileAuthCallback();
 
+  await rememberExistingPublications(strapi);
+
   // Register the lifecycle hook for newsletter-subscriber
   strapi.db.lifecycles.subscribe({
     models: ["api::newsletter-subscriber.newsletter-subscriber"], // IMPORTANT: Verify this UID
@@ -628,33 +634,17 @@ module.exports = async ({ strapi }) => {
 
   strapi.db.lifecycles.subscribe({
     models: ["api::happy-birthday.happy-birthday"],
-    async afterCreate(event) {
-      const { result } = event;
-      if (result?.journeyType === 'story' && !result.publishedAt) return;
-      if (result?.journeyType === 'story') {
-        const purchase = await strapi.db.query('api::celebration-purchase.celebration-purchase').findOne({ where: { purchaseId: result.premiumPurchaseId }, select: ['status'] });
-        // Strapi creates a new published row on every update. Only the first
-        // payment publication should send the celebration-ready email.
-        if (purchase?.status === 'paid') return;
-      }
-
-      if (
-        !result?.hostemail ||
-        !result?.hostname ||
-        !result?.personname ||
-        !result?.customroute
-      ) {
-        strapi.log.warn(
-          "Celebration created without the fields needed for a confirmation email. Skipping notification.",
-        );
-        return;
-      }
-
-      // Return from the lifecycle immediately; SMTP latency cannot hold up
-      // celebration creation. Delivery errors are logged inside the sender.
-      setImmediate(() => {
-        void sendCelebrationCreatedEmail(result).catch((error) => {
-          strapi.log.error('Unexpected celebration email error:', error);
+    async afterCreate({ result }) {
+      if (!result?.publishedAt || !result.documentId) return;
+      // Strapi creates rows for drafts and every re-publication. Schedule only
+      // after commit, then claim one durable delivery per document.
+      await strapi.db.transaction(({ onCommit }) => {
+        onCommit(() => {
+          setImmediate(() => {
+            void sendOnce(strapi, result, sendCelebrationCreatedEmail).catch((error) => {
+              strapi.log.error('Unexpected celebration email error:', error);
+            });
+          });
         });
       });
     },
