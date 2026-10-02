@@ -35,6 +35,7 @@ let app;
   app.config.set('dirs.static.public', testPublicDir);
   await app.load();
   app.plugin('email').service('email').send = async () => {};
+  await require('../tests/helpers/celebration-email-regression.cjs')(app);
   const role = await app.db
     .query('plugin::users-permissions.role')
     .findOne({ where: { type: 'authenticated' } });
