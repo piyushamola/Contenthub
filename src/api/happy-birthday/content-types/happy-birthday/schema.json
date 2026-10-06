@@ -69,6 +69,14 @@
       "type": "datetime",
       "required": false
     },
+    "triggerAt": {
+      "type": "datetime",
+      "required": false
+    },
+    "timezone": {
+      "type": "string",
+      "required": false
+    },
     "premiumUnlocked": {
       "type": "boolean",
       "required": false,

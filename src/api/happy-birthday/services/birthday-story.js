@@ -8,6 +8,12 @@ const {
   isInternalStoryDraftRoute,
 } = require('../utils/birthday-story');
 const { celebrationExpiresAt } = require('../utils/celebration-expiry');
+const {
+  isBeforeTrigger,
+  presentSchedule,
+  storyTriggerExpiry,
+  storyTriggerPatch,
+} = require('../utils/celebration-schedule');
 const UID = 'api::happy-birthday.happy-birthday';
 const PURCHASE = 'api::celebration-purchase.celebration-purchase';
 const populate = { owner: true, storyAssets: true };
@@ -56,6 +62,7 @@ module.exports = ({ strapi }) => ({
       if (
         !entry ||
         storyExpired(entry) ||
+        isBeforeTrigger(entry.triggerAt) ||
         !entry.premiumUnlocked ||
         entry.celebrationStatus === 'paused'
       )
@@ -106,6 +113,8 @@ module.exports = ({ strapi }) => ({
           ? 'active'
           : 'draft',
       expiresAt: entry.expiresAt,
+      ...presentSchedule(entry),
+      triggerLocked: Boolean(entry.storyFirstPublishedAt),
       hasUnpublishedChanges:
         entry.storyRevision !== entry.storyPublishedRevision,
       slug: entry.customroute,
@@ -168,7 +177,7 @@ module.exports = ({ strapi }) => ({
     });
     return this.read(entry.documentId, ownerId);
   },
-  async save(documentId, ownerId, input, revision) {
+  async save(documentId, ownerId, input, revision, trigger = {}) {
     let paidRecovery = null;
     await strapi.db.transaction(async () => {
       const entry = await this.owned(documentId, ownerId);
@@ -200,6 +209,7 @@ module.exports = ({ strapi }) => ({
           if (used) throw new Error('That link name is already taken');
         }
       }
+      const triggerPatch = storyTriggerPatch(entry, trigger);
       const result = await strapi.db.query(UID).updateMany({
         where: { id: entry.id, storyRevision: revision },
         data: {
@@ -208,6 +218,7 @@ module.exports = ({ strapi }) => ({
           customroute: content.slug || entry.customroute,
           personname: content.forName,
           hostname: content.hostName,
+          ...triggerPatch,
         },
       });
       if (!result.count)
@@ -357,7 +368,16 @@ module.exports = ({ strapi }) => ({
       )) throw new Error('Add link name before publishing this paid story');
       // Claim the first publication once. Replayed webhooks never move the expiry.
       const firstPublishedAt = new Date().toISOString();
-      const expiresAt = celebrationExpiresAt({ createdAt: firstPublishedAt });
+      const expiresAt = entry.triggerAt
+        ? storyTriggerExpiry(entry, firstPublishedAt)
+        : celebrationExpiresAt({ createdAt: firstPublishedAt });
+      if (entry.triggerAt && !expiresAt) {
+        return {
+          unlocked: false,
+          expired: true,
+          celebrationSlug: purchase.celebrationSlug,
+        };
+      }
       await strapi.db.query(UID).updateMany({
         where: { id: entry.id, storyFirstPublishedAt: null },
         data: {

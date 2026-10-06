@@ -7,7 +7,7 @@
 const { createCoreService } = require('@strapi/strapi').factories;
 
 const HAPPY_BIRTHDAY_UID = 'api::happy-birthday.happy-birthday';
-const { CELEBRATION_DURATION_MS } = require('../utils/celebration-expiry');
+const { CELEBRATION_DURATION_MS, celebrationWindowEndMs } = require('../utils/celebration-expiry');
 const CLEANUP_CONCURRENCY = 5;
 const DEFAULT_NON_EXPIRING_ROUTES = 'elena,matt,mike';
 const nonExpiringRoutes = (
@@ -118,13 +118,10 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
           }
 
           // Re-read immediately before unpublishing so a concurrent update
-          // cannot make the cleanup decision from stale data.
-          const currentExpiry = Date.parse(current.expiresAt || '');
-          const legacyExpiry =
-            Date.parse(current.createdAt || '') + CELEBRATION_DURATION_MS;
-          const effectiveExpiry = Number.isFinite(currentExpiry)
-            ? currentExpiry
-            : legacyExpiry;
+          // cannot make the cleanup decision from stale data. A trigger time
+          // starts the 24-hour window, so a celebration created earlier stays
+          // published until 24 hours after it opens.
+          const effectiveExpiry = celebrationWindowEndMs(current);
           if (Number.isFinite(effectiveExpiry) && effectiveExpiry > Date.now()) {
             result.skippedActive += 1;
             return;

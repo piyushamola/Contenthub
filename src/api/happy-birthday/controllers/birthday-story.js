@@ -19,7 +19,10 @@ module.exports = ({ strapi }) => ({
     service(s).read(c.params.documentId, b.ownerId),
   ),
   save: action(strapi, (s, c, b) =>
-    service(s).save(c.params.documentId, b.ownerId, b.content, b.revision),
+    service(s).save(c.params.documentId, b.ownerId, b.content, b.revision, {
+      triggerLocal: b.triggerLocal,
+      browserTimeZone: b.browserTimeZone,
+    }),
   ),
   attach: action(strapi, (s, c, b) =>
     service(s).attach(c.params.documentId, b.ownerId, b.fileId, b.duration),

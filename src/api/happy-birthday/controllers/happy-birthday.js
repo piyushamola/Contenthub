@@ -8,6 +8,26 @@ const { createCoreController } = require('@strapi/strapi').factories;
 
 const isServerToken = require('../policies/story-server');
 const { isInternalStoryDraftLink } = require('../utils/birthday-story');
+const { presentSchedule, resolveTrigger } = require('../utils/celebration-schedule');
+
+function applyTriggerTime(data) {
+  if (!data || typeof data !== 'object') return null;
+  const localTime = typeof data.triggerLocal === 'string' ? data.triggerLocal.trim() : '';
+  const browserTimeZone = data.browserTimeZone;
+  delete data.triggerLocal;
+  delete data.browserTimeZone;
+  if (!localTime) return null;
+  const resolved = resolveTrigger({
+    country: data.country,
+    browserTimeZone,
+    localTime,
+  });
+  if (resolved.error) return resolved.error;
+  data.triggerAt = resolved.triggerAt;
+  data.timezone = resolved.timezone;
+  data.expiresAt = resolved.expiresAt;
+  return null;
+}
 const UID = 'api::happy-birthday.happy-birthday';
 
 const DASHBOARD_POPULATE = {
@@ -80,6 +100,7 @@ function serializeForDashboard(entry) {
     // ?status=draft|published query parameter).
     status: entry.celebrationStatus || 'active',
     expiresAt: entry.expiresAt,
+    ...(entry.journeyType === 'story' ? {} : presentSchedule(entry)),
     premiumUnlocked: Boolean(entry.premiumUnlocked),
     journeyType: entry.journeyType || 'standard',
     storyState: entry.journeyType === 'story' ? (entry.storyExpiredAt || (entry.storyFirstPublishedAt && Date.parse(entry.expiresAt) <= Date.now()) ? 'expired' : entry.storyFirstPublishedAt ? 'active' : 'draft') : null,
@@ -133,13 +154,20 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     return super.findOne(ctx);
   },
   async create(ctx) {
-    if (!isServerToken(ctx) && Object.keys(ctx.request.body?.data || {}).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
+    const data = ctx.request.body?.data || {};
+    if (!isServerToken(ctx) && Object.keys(data).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
+    const triggerError = applyTriggerTime(data);
+    if (triggerError) return ctx.badRequest(triggerError);
     return super.create(ctx);
   },
   async update(ctx) {
+    const data = ctx.request.body?.data || {};
     if (!isServerToken(ctx)) {
       const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });
-      if (story || Object.keys(ctx.request.body?.data || {}).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
+      if (story || Object.keys(data).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
+    }
+    if (data.triggerAt !== undefined || data.timezone !== undefined || data.triggerLocal !== undefined || data.expiresAt !== undefined) {
+      return ctx.badRequest('The trigger time is set in the form and cannot be changed after publishing');
     }
     return super.update(ctx);
   },
