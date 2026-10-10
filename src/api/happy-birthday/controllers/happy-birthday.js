@@ -158,7 +158,16 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     if (!isServerToken(ctx) && Object.keys(data).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
     const triggerError = applyTriggerTime(data);
     if (triggerError) return ctx.badRequest(triggerError);
-    return super.create(ctx);
+    try {
+      return await super.create(ctx);
+    } catch (error) {
+      const text = `${error?.message || ''} ${error?.details || ''}`;
+      if (/unique|duplicate key|already exists/i.test(text)) {
+        ctx.throw(409, 'That celebration link is already taken');
+      }
+      strapi.log.error('Create celebration failed:', error);
+      throw error;
+    }
   },
   async update(ctx) {
     const data = ctx.request.body?.data || {};

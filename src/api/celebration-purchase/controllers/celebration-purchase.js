@@ -5,7 +5,10 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const UID = 'api::celebration-purchase.celebration-purchase';
 
 function message(error) {
-  return String(error?.message || error || 'Payment request failed');
+  const cause = error?.cause;
+  const detail = [cause?.code, cause?.message].filter(Boolean).join(': ');
+  const base = String(error?.message || error || 'Payment request failed');
+  return (detail ? `${base}: ${detail}` : base).slice(0, 1000);
 }
 
 module.exports = createCoreController(UID, ({ strapi }) => ({
@@ -15,9 +18,18 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
   },
 
   async access(ctx) {
-    const result = await strapi.service(UID).getAccess(ctx.params.slug);
-    if (!result) return ctx.notFound('Celebration not found');
-    ctx.body = result;
+    const slug = String(ctx.params.slug || '');
+    // A missing or nonsensical route is a normal page view, not a service failure.
+    if (!/^[a-z0-9][a-z0-9-]{2,79}$/i.test(slug)) {
+      ctx.body = { found: false, unlocked: false, features: [], journeyType: 'standard', expiresAt: null, amountPaise: 0, currency: 'INR', ownerId: null };
+      return;
+    }
+    const result = await strapi.service(UID).getAccess(slug);
+    if (!result) {
+      ctx.body = { found: false, unlocked: false, features: [], journeyType: 'standard', expiresAt: null, amountPaise: 0, currency: 'INR', ownerId: null };
+      return;
+    }
+    ctx.body = { found: true, ...result };
   },
 
   async createOrder(ctx) {

@@ -80,6 +80,24 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   const storyPricing = await request('/celebration-payments/pricing?product=story', { token: serverToken.accessKey });
   assert.equal(storyPricing.status, 200);
   assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500 });
+  const duplicate = await request('/happy-birthdays', {
+    token: serverToken.accessKey,
+    method: 'POST',
+    body: { data: {
+      personname: 'Duplicate',
+      personemail: user.email,
+      hostname: 'Regression Creator',
+      hostemail: user.email,
+      customroute: celebration.customroute,
+      birthdaymessages: ['One', 'Two', 'Three'],
+      templateId: 'classic',
+      musicId: 'none',
+      country: 'IN',
+    } },
+  });
+  assert.equal(duplicate.status, 409);
+  assert.match(duplicate.body.error.message, /already taken/i);
+
   const access = await request(`/celebration-payments/access/${celebration.customroute}`, { token: serverToken.accessKey });
   assert.equal(access.status, 200);
   assert.equal(access.body.ownerId, user.id);
