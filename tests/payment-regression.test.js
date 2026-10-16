@@ -263,3 +263,14 @@ test('free, paid, expired and unpublished access return the expected capabilitie
   assert.deepEqual(f.service.accessFor({ ...story, storyIsPublished: true }, prices).features, ['video', 'pdf']);
   assert.equal(f.service.accessFor({ ...story, storyIsPublished: true, storyExpiredAt: new Date().toISOString() }, prices).unlocked, false);
 });
+
+test('public access exposes the stored content version without changing entitlements', () => {
+  const f = fixture({ celebration: { updatedAt: '2026-10-13T12:00:00.000Z' } });
+  const prices = { INR: 900, USD: 100 };
+  const access = f.service.accessFor(f.celebration, prices);
+  assert.equal(access.contentVersion, '2026-10-13T12:00:00.000Z');
+  assert.equal(access.unlocked, false);
+  assert.deepEqual(access.features, ['collage']);
+  assert.equal(f.service.accessFor({ ...f.celebration, updatedAt: new Date('2026-10-13T12:00:01Z') }, prices).contentVersion, '2026-10-13T12:00:01.000Z');
+  assert.equal(f.service.accessFor({ ...f.celebration, updatedAt: undefined }, prices).contentVersion, null);
+});

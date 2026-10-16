@@ -153,6 +153,7 @@ let app;
   await service.attach(draft.documentId, user.id, audio.id, 30);
   let content = {
     ...draft.content,
+    theme: 'pastel',
     forName: 'Aanya',
     hostName: 'Sam',
     slug: 'story-test-aanya',
@@ -187,6 +188,12 @@ let app;
     draft.revision,
   );
   assert.equal(draft.slug, content.slug, 'The entered link becomes the public route');
+  assert.equal((await service.read(draft.documentId, user.id)).content.theme, 'pastel', 'The chosen style is persisted');
+  await assert.rejects(
+    () => service.save(draft.documentId, user.id, { ...content, theme: 'unsupported' }, draft.revision),
+    /supported story style/i,
+  );
+  assert.equal((await service.read(draft.documentId, user.id)).content.theme, 'pastel', 'Invalid style must not replace saved content');
   const linkedDashboard = { state: { user: { id: user.id } }, query: {} };
   await app.controller(UID).mine(linkedDashboard);
   assert.equal(
@@ -309,7 +316,7 @@ let app;
     /link name cannot change after checkout starts/i,
   );
   assert.equal((await service.read(draft.documentId, user.id)).slug, content.slug);
-  content = { ...content, letter: 'My private unfinished change.' };
+  content = { ...content, theme: 'classic', letter: 'My private unfinished change.' };
   draft = await service.save(
     draft.documentId,
     user.id,
@@ -323,6 +330,7 @@ let app;
     published.storyPublishedContent.letter,
     'You mean so much to me.',
   );
+  assert.equal(published.storyPublishedContent.theme, 'pastel', 'Style edits stay private until explicitly published');
   await service.addWish(content.slug, {
     name: 'Guest',
     message: 'Have a wonderful birthday!',
@@ -340,6 +348,7 @@ let app;
     where: { documentId: draft.documentId, publishedAt: { $notNull: true } },
   });
   assert.equal(published.storyPublishedContent.letter, content.letter);
+  assert.equal(published.storyPublishedContent.theme, 'pastel', 'Publishing a legacy style uses the single Pastel theme');
   assert.equal(published.expiresAt, originalExpiry);
   assert.equal(published.guestwishes.length, 1);
   await app.db.query(UID).updateMany({

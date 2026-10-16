@@ -34,6 +34,7 @@ The runner supports macOS and Linux (`/tmp` and `/dev/null`), including the Ubun
 - Cleanup rechecks records before unpublishing, handles duplicate rows, and continues after a per-record failure.
 - The existing story integration covers private drafts, owner isolation, upload duration/content limits, optimistic revision checks, paid publication, private edits versus published content, wishes, 24-hour expiry, migration idempotency, no republishing, concurrent checkout and recovery of interrupted checkout.
 - Real HTTP requests cover password login, failed login, sanitized `/users/me`, dashboard routing and pagination, another user's empty dashboard, forbidden cross-owner pause, owner pause/resume, and authenticated API-token pricing/access response shapes.
+- Access responses include `contentVersion` from the published celebration's `updatedAt`. The frontend uses it to keep late cached reads separate from newer messages and wishes. Unit coverage checks string/Date/missing timestamps without changing entitlements; real HTTP coverage updates a guest wish, checks that the version changes, and reads the persisted published wish. This adds no schema field or migration.
 
 ## CI and merge protection
 
@@ -90,3 +91,7 @@ Do not delete or weaken a failed assertion just to get a green build. Decide whe
 No test suite can prove that every future change is safe. These checks cover the listed paths, not every CMS type or every input. SQLite cannot prove PostgreSQL-specific SQL, migration behavior, or production concurrency. Live Razorpay capture/refunds/webhooks, SMTP delivery, Google OAuth, browser rendering/media exports, and production infrastructure need separate provider sandbox/staging checks. The frontend has its own browser checks in its repository.
 
 The current bootstrap attempts to seed old example article/category types and catches/logs some errors during a fresh database boot. The integration assertions pass after bootstrap; a green run does not certify this sample seed data. Strapi also currently warns about missing admin encryption configuration, and the local macOS Sharp installation can report duplicate libvips classes. These are existing application/dependency warnings, not suppressed by the test harness.
+
+## October 14 single Story theme
+
+`normalizeStory` now returns `theme: pastel` for new content, omitted themes and legacy `classic` input. It still rejects unsupported/malformed values. This is normalization inside existing Story JSON; it adds no schema field or migration. The matching frontend removes the theme chooser and renders legacy published content/exports in Pastel without writing on preview. Unit and real persistence/private-public integration expectations were updated in the existing gate. No backend checks were run for this follow-up request; prior passing results predate this change. See `../birthday-celebration/docs/story-style-implementation.md`.

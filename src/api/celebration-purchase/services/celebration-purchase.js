@@ -77,6 +77,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         'documentId',
         'customroute',
         'createdAt',
+        'updatedAt',
         'expiresAt',
         'country',
         'premiumUnlocked',
@@ -103,6 +104,9 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     );
     const offer = offerForCountry(billingCountry(celebration, fallbackCountry), prices);
     return {
+      contentVersion: celebration.updatedAt instanceof Date
+        ? celebration.updatedAt.toISOString()
+        : typeof celebration.updatedAt === 'string' ? celebration.updatedAt : null,
       unlocked,
       features: celebration.journeyType === 'story' ? (unlocked ? ['video', 'pdf'] : []) : unlocked ? ['video', 'collage'] : ['collage'],
       journeyType: celebration.journeyType || 'standard',
