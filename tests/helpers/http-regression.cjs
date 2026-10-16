@@ -104,6 +104,19 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   assert.equal(access.body.unlocked, false);
   assert.equal(access.body.amountPaise, 900);
   assert.deepEqual(access.body.features, ['collage']);
+  assert.equal(typeof access.body.contentVersion, 'string');
+  const updated = await request(`/happy-birthdays/${celebration.documentId}`, {
+    token: serverToken.accessKey, method: 'PUT',
+    body: { data: { guestwishes: [{ name: 'HTTP guest', message: 'A persisted birthday wish' }] } },
+  });
+  assert.equal(updated.status, 200);
+  const afterWish = await request(`/celebration-payments/access/${celebration.customroute}`, { token: serverToken.accessKey });
+  assert.equal(afterWish.status, 200);
+  assert.equal(typeof afterWish.body.contentVersion, 'string');
+  assert.notEqual(afterWish.body.contentVersion, access.body.contentVersion);
+  const publicRead = await request(`/happy-birthdays?filters[customroute][$eqi]=${celebration.customroute}&status=published`, { token: serverToken.accessKey });
+  assert.equal(publicRead.status, 200);
+  assert.ok(publicRead.body.data.some(entry => entry.guestwishes.some(wish => wish.message === 'A persisted birthday wish')));
   assert.equal((await request('/birthday-stories', {
     token, method: 'POST', body: { ownerId: user.id },
   })).status, 403, 'A browser JWT cannot call internal story endpoints');

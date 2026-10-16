@@ -73,6 +73,8 @@ function normalizeStory(
 ) {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     fail('Invalid story');
+  if (input.theme !== undefined && !['classic', 'pastel'].includes(input.theme))
+    fail('Choose a supported story style');
   const owned = new Map(assets.map((asset) => [asset.id, asset]));
   const media = (id, kind, required) => {
     if (id == null && !required) return null;
@@ -127,6 +129,7 @@ function normalizeStory(
   );
   return {
     version: 1,
+    theme: 'pastel',
     forName: text(input.forName, 80, 'Recipient name', complete),
     hostName: text(input.hostName, 80, 'Your name', complete),
     slug,
