@@ -52,7 +52,7 @@ let app;
   const pricing = await app
     .service('api::premium-pricing.premium-pricing')
     .storySettings();
-  assert.deepEqual(pricing, { INR: 3600, USD: 500 });
+  assert.deepEqual(pricing, { INR: 3600, USD: 500, originalINR: null, originalUSD: null });
   let draft = await service.create(user.id, 'IN', crypto.randomUUID());
   assert.equal(draft.state, 'draft');
   assert.equal(draft.content.slug, '', 'A new story needs a creator-entered link');
@@ -514,8 +514,10 @@ let app;
     other.revision,
   );
   let orderCalls = 0;
-  payments.razorpay = async () => {
+  const quotedProviderOrders = [];
+  payments.razorpay = async (_path, init) => {
     orderCalls++;
+    quotedProviderOrders.push(JSON.parse(init.body));
     return { id: `order_global_${orderCalls}`, status: 'created' };
   };
   const simultaneous = await Promise.allSettled(
@@ -544,11 +546,13 @@ let app;
       data: {
         storyIndiaPriceRupees: 42,
         storyOtherCountriesPriceUsd: 7,
+        storyIndiaOriginalPriceRupees: 84,
+        storyOtherCountriesOriginalPriceUsd: 14,
       },
     });
   assert.deepEqual(
     await app.service('api::premium-pricing.premium-pricing').storySettings(),
-    { INR: 4200, USD: 700 },
+    { INR: 4200, USD: 700, originalINR: 8400, originalUSD: 1400 },
   );
   const pinnedOrder = await payments.createOrder({
     slug: other.slug,
@@ -566,6 +570,25 @@ let app;
     500,
     'Checkout quote matches the pending order',
   );
+  assert.equal((await payments.getAccess(other.slug)).originalAmountPaise, 1400, 'Comparison metadata follows the USD quote while the saved 500 charge remains unchanged');
+  for (const [country, currency, amount, original] of [['IN', 'INR', 4200, 8400], ['US', 'USD', 700, 1400]]) {
+    let compared = await service.create(user.id, country, crypto.randomUUID());
+    for (const file of files) await service.attach(compared.documentId, user.id, file.id, null);
+    compared = await service.save(compared.documentId, user.id,
+      { ...content, slug: `story-original-price-${currency.toLowerCase()}`, voiceId: null }, compared.revision);
+    const access = await payments.getAccess(compared.slug);
+    assert.equal(access.amountPaise, amount);
+    assert.equal(access.currency, currency);
+    assert.equal(access.originalAmountPaise, original);
+    const quoted = await payments.createOrder({
+      slug: compared.slug, purchaseId: crypto.randomUUID(), ownerId: user.id,
+      country: country === 'IN' ? 'US' : 'IN',
+    });
+    assert.equal(quoted.amount, amount, 'Story checkout charges the current amount, never the original display amount');
+    assert.equal(quoted.currency, currency, 'Saved billing country remains authoritative');
+    assert.equal(quotedProviderOrders.at(-1).amount, amount);
+    assert.equal(quotedProviderOrders.at(-1).currency, currency);
+  }
   await app
     .documents('api::premium-pricing.premium-pricing')
     .delete({ documentId: priceEntry.documentId });

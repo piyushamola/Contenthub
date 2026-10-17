@@ -197,6 +197,26 @@ async function main() {
       };
       return;
     }
+    if (route === '/pricing' && ['GET', 'PATCH'].includes(ctx.method)) {
+      if (mode !== 'mock') { ctx.status = 409; ctx.body = { error: 'Pricing controls are available only in mock mode' }; return; }
+      const fields = ['indiaPriceRupees', 'otherCountriesPriceUsd', 'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd',
+        'indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd'];
+      let pricing = await app.db.query(PRICING_UID).findOne({});
+      if (!pricing) { ctx.status = 404; ctx.body = { error: 'Regression pricing not found' }; return; }
+      if (ctx.method === 'PATCH') {
+        if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.keys(body).length ||
+            Object.keys(body).some(field => !fields.includes(field))) {
+          ctx.status = 400; ctx.body = { error: 'Choose only supported pricing fields' }; return;
+        }
+        try {
+          pricing = await app.documents(PRICING_UID).update({ documentId: pricing.documentId, data: body });
+        } catch {
+          ctx.status = 400; ctx.body = { error: 'Invalid regression pricing' }; return;
+        }
+      }
+      ctx.body = { data: Object.fromEntries(fields.map(field => [field, pricing[field] ?? null])) };
+      return;
+    }
     if (ctx.method === 'GET' && route === '/outbox') {
       ctx.body = { messages: outbox.filter((mail) => !ctx.query.email || JSON.stringify(mail.to).includes(ctx.query.email)) };
       return;

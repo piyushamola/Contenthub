@@ -25,6 +25,12 @@ function offerForCountry(country, prices) {
   return { amountPaise: prices[currency], currency };
 }
 
+function originalForQuote(prices, currency, amount) {
+  const original = prices[`original${currency}`];
+  return Number.isSafeInteger(amount) && amount > 0 &&
+    Number.isSafeInteger(original) && original > amount ? original : null;
+}
+
 function billingCountry(celebration, fallbackCountry) {
   const savedCountry = String(celebration?.country || '').trim().toUpperCase();
   return /^[A-Z]{2}$/.test(savedCountry) ? savedCountry : fallbackCountry;
@@ -113,20 +119,26 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       expiresAt,
       amountPaise: offer.amountPaise,
       currency: offer.currency,
+      originalAmountPaise: originalForQuote(prices, offer.currency, offer.amountPaise),
       // Lets the Next.js layer recognize a logged-in owner as the host from
       // any device, without a second round trip just to read this field.
       ownerId: celebration?.owner?.id ?? null,
     };
   },
 
-  async getAccess(slug) {
+  async getAccess(slug, fallbackCountry) {
     const celebration = await this.findCelebration(slug);
     if (!celebration) return null;
     const prices = celebration.journeyType === 'story' ? await strapi.service(PRICING_UID).storySettings() : await strapi.service(PRICING_UID).currentPrices();
-    const access = this.accessFor(celebration, prices);
+    const access = this.accessFor(celebration, prices, fallbackCountry);
     if (celebration.journeyType === 'story' && !access.unlocked) {
       const pending = await strapi.db.query(PURCHASE_UID).findOne({ where: { celebrationDocumentId: celebration.documentId, productType: 'story', status: 'created' } });
-      if (pending) return { ...access, amountPaise: pending.amountPaise, currency: pending.currency };
+      if (pending) return {
+        ...access,
+        amountPaise: pending.amountPaise,
+        currency: pending.currency,
+        originalAmountPaise: originalForQuote(prices, pending.currency, pending.amountPaise),
+      };
     }
     return access;
   },

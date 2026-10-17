@@ -1,6 +1,8 @@
 # Regression checks
 
-Use Node 22 (the supported runtime in `package.json`) and npm. From this repository:
+Test execution is opt-in. Run these commands only when the current request
+explicitly asks for testing, using Node 22 (the supported runtime in
+`package.json`) and npm. From this repository:
 
 ```sh
 npm ci
@@ -25,7 +27,11 @@ The runner supports macOS and Linux (`/tmp` and `/dev/null`), including the Ubun
 
 - Celebration email delivery: draft rows send nothing; the first committed publication claims one persistent, uniquely keyed delivery. Updates, republishing and restart backfills cannot resend it. SMTP failures are recorded without automatic retries. Provider and auth-template Reply-To use `wishhappybday@gmail.com`. Covered by `tests/email-settings.test.js` and `tests/helpers/celebration-email-regression.cjs` in the existing integration gate.
 
-- Pricing conversion to payment units; new orders use current prices and existing orders keep the quoted price.
+- Pricing conversion to payment units for Standard Premium and Birthday Story;
+  optional original prices are display metadata, new orders use current
+  prices and existing orders keep their saved amount/currency. See the
+  [pricing contract](pricing.md) for the major-unit CMS fields and minor-unit
+  API values.
 - Checkout ownership, valid purchase IDs, demo/expired/deleted celebrations, and reuse of another celebration's payment attempt.
 - Payment signatures, provider capture status, order ownership, payment and order amount/currency checks.
 - Duplicate captures, duplicate/retried webhooks, partial/full refunds, and preserving the original payment's entitlement.
@@ -67,6 +73,7 @@ All controls require `Authorization: Bearer <ready.control.token>`. Paths below 
 | Method and path | Behavior |
 | --- | --- |
 | `GET /state` | Record/upload/mail counts and mock provider order/payment/call counts |
+| `GET /pricing`, `PATCH /pricing` | Mock mode only: read or edit the eight supported current/original price fields in the isolated real singleton; returns `{data}` so tests can restore previous values |
 | `GET /celebrations/:slug` | Real draft/published rows, related purchases, and retained image/story media; owner fields exclude password hashes |
 | `POST /celebrations/:slug/expire` | Set expiry in the past and run the real unpublish cleanup |
 | `GET /outbox?email=...` | Captured email content, including real registration/reset links |
@@ -76,13 +83,20 @@ All controls require `Authorization: Bearer <ready.control.token>`. Paths below 
 
 Capture accepts optional `paymentId`, `amount`, and `currency` fields for negative verification cases. Refund accepts optional `amount`, defaulting to the full payment. Neither control directly grants or revokes application access. Their response includes `{eventId, webhook: {rawBody, signature}}`; capture also returns `{orderId, paymentId, signature}` for payment verification.
 
+The pricing control uses the same required bearer token and returns 409 outside
+mock mode. Unsupported fields, empty payloads and invalid schema writes return
+400. The control is mounted only by the disposable launcher, never normal
+Strapi startup. Tests changing prices must restore the returned values in
+`finally` and revalidate the frontend's public price tag; the control does not
+grant access, create provider orders or silently clear Next's cache.
+
 `--payments razorpay-test` preserves the real provider service. It requires explicitly passed `REGRESSION_RAZORPAY_KEY_ID` and `REGRESSION_RAZORPAY_KEY_SECRET`; a missing key, dummy key, or key without the `rzp_test_` prefix is rejected before Strapi boots. Only that mode permits outgoing connections to `api.razorpay.com`, and mock capture/refund controls return 409. Real provider test orders/payments remain in the provider's test dashboard; local shutdown does not delete remote provider history. Run this mode only as an explicitly authorized sandbox check. Ordinary `npm run check` remains offline and uses the provider mock.
 
 ## Adding features and fixing bugs
 
 Follow the repository's [change and regression test rules](../AGENTS.md) for every change. They tell coding agents when to add tests, where to put them, and which checks to run before marking work complete.
 
-Add a behavior test for each new feature and a regression test for each fixed bug. Put pure service/policy cases in `tests/*.test.js`; the runner discovers these files automatically. Add database relationships, constraints, publication, or migration cases to `scripts/test-birthday-story.cjs` or an integration suite wired into `scripts/run-check.cjs`. Add HTTP contract cases to `tests/helpers/http-regression.cjs`. Stub external providers at their network boundary and assert user-visible outcomes or persisted state. Run `npm run check` before opening the PR.
+Add a behavior test for each new feature and a regression test for each fixed bug. Put pure service/policy cases in `tests/*.test.js`; the runner discovers these files automatically. Add database relationships, constraints, publication, or migration cases to `scripts/test-birthday-story.cjs` or an integration suite wired into `scripts/run-check.cjs`. Add HTTP contract cases to `tests/helpers/http-regression.cjs`. Stub external providers at their network boundary and assert user-visible outcomes or persisted state. When testing is explicitly requested, run the appropriate gate and record its actual results; otherwise record that it was not run.
 
 Do not delete or weaken a failed assertion just to get a green build. Decide whether the behavior change is intended; update the corresponding contract and tests together when it is. Keep the test database separate from development and production.
 
@@ -95,3 +109,30 @@ The current bootstrap attempts to seed old example article/category types and ca
 ## October 14 single Story theme
 
 `normalizeStory` now returns `theme: pastel` for new content, omitted themes and legacy `classic` input. It still rejects unsupported/malformed values. This is normalization inside existing Story JSON; it adds no schema field or migration. The matching frontend removes the theme chooser and renders legacy published content/exports in Pastel without writing on preview. Unit and real persistence/private-public integration expectations were updated in the existing gate. No backend checks were run for this follow-up request; prior passing results predate this change. See `../birthday-celebration/docs/story-style-implementation.md`.
+
+## October 17 optional original prices
+
+The additive pricing schema adds independent optional originals for Standard
+Premium and Birthday Story in INR/USD, without defaults or a stored percentage.
+`tests/premium-pricing.test.js` covers usable/missing/malformed comparisons and
+unchanged current charges. `tests/payment-regression.test.js` covers exact
+quote currency/amount comparisons, permissions and pending Story amounts.
+The existing `scripts/test-birthday-story.cjs` integration and new
+`tests/helpers/premium-pricing-regression.cjs`, called by the HTTP regression
+helper, cover real schema persistence/clearing, overprecision suppression,
+both product/currency API shapes and Story order pricing. The launcher/server
+suite covers the mock-only pricing control described above.
+
+Matching frontend coverage includes `tests/e2e/discount-pricing-api.spec.ts`
+for a visitor abroad receiving the saved Standard INR quote without owner-ID
+leakage or new guest permissions; `tests/stack/payments.spec.ts` checks the
+same saved-country quote against a real order. `tests/stack/pricing.spec.ts`
+checks real CMS edits, both public product offers, authenticated price-cache
+revalidation and no provider side effects. The
+[frontend handoff](../../birthday-celebration/docs/2026-10-17-configurable-pricing.md)
+lists the remaining helper/browser coverage and NAV-03/PRICE-01–14 cases.
+
+**No tests, builds or other verification commands were run for this October 17
+request.** Existing run results apply to their recorded snapshots. See
+[pricing setup](pricing.md) for backend-first deployment, Save without Publish,
+optional-original fallback and the shared revalidation workflow.

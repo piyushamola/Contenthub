@@ -65,7 +65,9 @@ try {
     timeout: mode === 'build' ? 10 * 60_000 : 5 * 60_000,
   });
   if (result.error) console.error(result.error.message);
-  process.exitCode = result.status === 0 ? 0 : 1;
+  // A child can catch the timeout's termination signal and exit zero. The
+  // spawn error still means this check did not complete successfully.
+  process.exitCode = !result.error && !result.signal && result.status === 0 ? 0 : 1;
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

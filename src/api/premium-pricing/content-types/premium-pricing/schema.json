@@ -17,11 +17,21 @@
       "min": 0.01,
       "default": 9
     },
+    "indiaOriginalPriceRupees": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
     "otherCountriesPriceUsd": {
       "type": "decimal",
       "required": true,
       "min": 0.01,
       "default": 1
+    },
+    "otherCountriesOriginalPriceUsd": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
     },
     "storyIndiaPriceRupees": {
       "type": "decimal",
@@ -29,11 +39,21 @@
       "min": 0.01,
       "default": 36
     },
+    "storyIndiaOriginalPriceRupees": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
     "storyOtherCountriesPriceUsd": {
       "type": "decimal",
       "required": true,
       "min": 0.01,
       "default": 5
+    },
+    "storyOtherCountriesOriginalPriceUsd": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
     }
   }
 }

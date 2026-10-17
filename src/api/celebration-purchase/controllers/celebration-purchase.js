@@ -24,7 +24,11 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
       ctx.body = { found: false, unlocked: false, features: [], journeyType: 'standard', expiresAt: null, amountPaise: 0, currency: 'INR', ownerId: null };
       return;
     }
-    const result = await strapi.service(UID).getAccess(slug);
+    // This token-scoped endpoint receives the visitor country from the trusted
+    // Next server. It only fills a missing/invalid saved billing country.
+    const country = typeof ctx.query.country === 'string' && /^[A-Z]{2}$/i.test(ctx.query.country.trim())
+      ? ctx.query.country.trim().toUpperCase() : undefined;
+    const result = await strapi.service(UID).getAccess(slug, country);
     if (!result) {
       ctx.body = { found: false, unlocked: false, features: [], journeyType: 'standard', expiresAt: null, amountPaise: 0, currency: 'INR', ownerId: null };
       return;

@@ -64,7 +64,18 @@ async function main() {
       assert.equal(login.status, 200);
     }
     const token = ready.frontendEnv.AUTHORIZATION_TOKEN;
-    assert.deepEqual((await request('/api/celebration-payments/pricing', { token })).data, { INR: 900, USD: 100 });
+    assert.deepEqual((await request('/api/celebration-payments/pricing', { token })).data, { INR: 900, USD: 100, originalINR: null, originalUSD: null });
+    assert.equal((await request('/__regression/pricing')).status, 401);
+    assert.equal((await request('/__regression/pricing', { method: 'PATCH', data: { indiaPriceRupees: 1 } })).status, 401);
+    const pricingBefore = await request('/__regression/pricing', { control: true });
+    assert.equal(pricingBefore.status, 200);
+    assert.equal((await request('/__regression/pricing', { method: 'PATCH', control: true, data: { unrelatedField: 1 } })).status, 400);
+    assert.equal((await request('/__regression/pricing', { method: 'PATCH', control: true, data: { indiaPriceRupees: -1 } })).status, 400);
+    const originalPricing = await request('/__regression/pricing', { method: 'PATCH', control: true, data: { indiaOriginalPriceRupees: 18 } });
+    assert.equal(originalPricing.status, 200);
+    assert.equal(Number(originalPricing.data.data.indiaPriceRupees), 9);
+    assert.deepEqual((await request('/api/celebration-payments/pricing', { token })).data, { INR: 900, USD: 100, originalINR: 1800, originalUSD: null });
+    assert.equal((await request('/__regression/pricing', { method: 'PATCH', control: true, data: pricingBefore.data.data })).status, 200);
     const slug = `server-smoke-${crypto.randomUUID()}`;
     const creation = await request('/api/happy-birthdays?status=published', { method: 'POST', token, data: { data: {
       personname: 'Smoke test', personemail: 'smoke@example.test', hostname: 'Regression Creator', hostemail: ready.users.creator.email,

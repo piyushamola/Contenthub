@@ -13,7 +13,7 @@ const PURCHASE_ID = '00000000-0000-4000-8000-000000000001';
 
 // These doubles stop at the database and provider boundaries. Every assertion
 // calls the real service API; the integration suite covers actual Strapi writes.
-function fixture({ celebration = {}, purchase = {} } = {}) {
+function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 100 } } = {}) {
   const celebrationRow = celebration === null ? null : {
     documentId: 'celebration-1',
     customroute: 'regression-birthday',
@@ -56,7 +56,7 @@ function fixture({ celebration = {}, purchase = {} } = {}) {
     strapi: {
       contentType: (uid) => ({ uid }),
       service: (uid) => {
-        if (uid === PRICING_UID) return { currentPrices: async () => ({ INR: 900, USD: 100 }) };
+        if (uid === PRICING_UID) return { currentPrices: async () => prices, storySettings: async () => prices };
         if (uid === 'api::happy-birthday.birthday-story') return { findBySlug: async () => null };
         assert.fail(`Unexpected service ${uid}`);
       },
@@ -273,4 +273,70 @@ test('public access exposes the stored content version without changing entitlem
   assert.deepEqual(access.features, ['collage']);
   assert.equal(f.service.accessFor({ ...f.celebration, updatedAt: new Date('2026-10-13T12:00:01Z') }, prices).contentVersion, '2026-10-13T12:00:01.000Z');
   assert.equal(f.service.accessFor({ ...f.celebration, updatedAt: undefined }, prices).contentVersion, null);
+});
+
+test('access compares an original against the exact product and currency quote without changing permissions', () => {
+  const f = fixture();
+  for (const journeyType of ['standard', 'story']) {
+    for (const [country, currency, amount, original] of [['IN', 'INR', 900, 1800], ['US', 'USD', 100, 250]]) {
+      const celebration = { ...f.celebration, country, journeyType };
+      const prices = { INR: 900, USD: 100, originalINR: 1800, originalUSD: 250 };
+      const access = f.service.accessFor(celebration, prices);
+      assert.equal(access.amountPaise, amount);
+      assert.equal(access.currency, currency);
+      assert.equal(access.originalAmountPaise, original);
+      assert.equal(access.unlocked, false);
+      assert.deepEqual(access.features, journeyType === 'story' ? [] : ['collage']);
+      for (const invalid of [undefined, null, amount, amount - 1, '9999', NaN, Infinity, 1.5]) {
+        assert.equal(f.service.accessFor(celebration, { ...prices, [`original${currency}`]: invalid }).originalAmountPaise, null);
+      }
+    }
+  }
+});
+
+test('access uses the trusted country fallback only when the saved billing country is missing or invalid', async () => {
+  const prices = { INR: 900, USD: 100, originalINR: 1800, originalUSD: 250 };
+  for (const journeyType of ['standard', 'story']) {
+    for (const country of [undefined, null, '', 'India', 'I', '123']) {
+      const f = fixture({ celebration: { journeyType, country }, prices });
+      for (const [fallback, currency, amount, original] of [['IN', 'INR', 900, 1800], ['US', 'USD', 100, 250]]) {
+        const access = await f.service.getAccess(f.celebration.customroute, fallback);
+        assert.equal(access.currency, currency);
+        assert.equal(access.amountPaise, amount);
+        assert.equal(access.originalAmountPaise, original);
+        assert.equal(access.unlocked, false);
+        assert.deepEqual(access.features, journeyType === 'story' ? [] : ['collage']);
+      }
+      const withoutFallback = await f.service.getAccess(f.celebration.customroute);
+      assert.equal(withoutFallback.currency, 'USD', 'Readers without a visitor country retain their existing behavior');
+      assert.equal(withoutFallback.amountPaise, 100);
+      assert.deepEqual(f.providerCalls, []);
+    }
+    for (const [country, fallback, currency, amount] of [[' in ', 'US', 'INR', 900], ['US', 'IN', 'USD', 100]]) {
+      const f = fixture({ celebration: { journeyType, country }, prices });
+      const access = await f.service.getAccess(f.celebration.customroute, fallback);
+      assert.equal(access.currency, currency);
+      assert.equal(access.amountPaise, amount, 'A visitor cannot override a valid saved billing country');
+    }
+  }
+});
+
+test('pending Story access uses its saved currency and amount when displaying an original', async () => {
+  const f = fixture({
+    celebration: { journeyType: 'story', country: 'IN' },
+    purchase: { productType: 'story', currency: 'USD', amountPaise: 900 },
+    prices: { INR: 3600, USD: 700, originalINR: 7200, originalUSD: 1000 },
+  });
+  const quoted = await f.service.getAccess(f.celebration.customroute, 'IN');
+  assert.equal(quoted.amountPaise, 900);
+  assert.equal(quoted.currency, 'USD');
+  assert.equal(quoted.originalAmountPaise, 1000);
+  assert.equal(f.purchase.amountPaise, 900);
+  for (const amount of [1000, 1100]) {
+    f.purchase.amountPaise = amount;
+    const access = await f.service.getAccess(f.celebration.customroute);
+    assert.equal(access.amountPaise, amount);
+    assert.equal(access.originalAmountPaise, null);
+  }
+  assert.deepEqual(f.providerCalls, [], 'Reading comparison metadata never contacts the provider');
 });

@@ -2,6 +2,24 @@
 
 Strapi comes with a full featured [Command Line Interface](https://docs.strapi.io/dev-docs/cli) (CLI) which lets you scaffold and manage your project in seconds.
 
+## Celebration pricing
+
+**Content Manager → Single Types → Premium pricing** configures Standard
+Premium and Birthday Story independently, for India (INR) and other countries
+(USD). Enter rupees/dollars with at most two decimal places. Current-price
+defaults are ₹9/US$1 for Standard Premium and ₹36/US$5 for Story. Four optional
+original-price fields add comparison amounts; they have no defaults and never
+determine the charge.
+
+The singleton has Draft & Publish disabled: use **Save**, then send the
+frontend's authenticated `premium-pricing` revalidation webhook to refresh
+cached public offers. Checkout uses the uncached billing quote and preserves
+existing order amounts. See [the pricing contract and operator steps](docs/pricing.md)
+for exact field names, major/minor units, original-price eligibility and
+backend-first deployment. The [regression guide](docs/regression-testing.md)
+lists coverage and opt-in checks. No tests were run for the October 17 pricing
+change.
+
 ### `develop`
 
 Start your Strapi application with autoReload enabled. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-develop)

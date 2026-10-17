@@ -76,10 +76,11 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   });
   const pricing = await request('/celebration-payments/pricing', { token: serverToken.accessKey });
   assert.equal(pricing.status, 200);
-  assert.deepEqual(pricing.body, { INR: 900, USD: 100 });
+  assert.deepEqual(pricing.body, { INR: 900, USD: 100, originalINR: null, originalUSD: null });
   const storyPricing = await request('/celebration-payments/pricing?product=story', { token: serverToken.accessKey });
   assert.equal(storyPricing.status, 200);
-  assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500 });
+  assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500, originalINR: null, originalUSD: null });
+  await require('./premium-pricing-regression.cjs')(app, user, celebration, request, serverToken.accessKey);
   const duplicate = await request('/happy-birthdays', {
     token: serverToken.accessKey,
     method: 'POST',
