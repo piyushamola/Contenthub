@@ -165,7 +165,6 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
       if (/unique|duplicate key|already exists/i.test(text)) {
         ctx.throw(409, 'That celebration link is already taken');
       }
-      strapi.log.error('Create celebration failed:', error);
       throw error;
     }
   },

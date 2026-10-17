@@ -1,6 +1,7 @@
 module.exports = [
   "strapi::logger",
   "strapi::errors",
+  "global::api-failure-log",
   "strapi::security",
   "strapi::cors",
   "strapi::poweredBy",

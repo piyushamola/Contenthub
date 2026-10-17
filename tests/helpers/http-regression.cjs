@@ -20,11 +20,44 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(10_000),
     });
-    return { status: response.status, body: await response.json() };
+    return {
+      status: response.status, body: await response.json(),
+      failureRequestId: response.headers.get('x-contenthub-request-id'),
+    };
   }
 
-  const anonymous = await request('/happy-birthdays/mine');
+  async function captureFailures(action) {
+    const logs = [];
+    const originals = { warn: app.log.warn, error: app.log.error };
+    for (const level of Object.keys(originals)) {
+      app.log[level] = function (...args) {
+        if (typeof args[0] === 'string' && args[0].startsWith('[api_request_failed] ')) {
+          logs.push({ level, ...JSON.parse(args[0].slice('[api_request_failed] '.length)) });
+        }
+        return originals[level].apply(this, args);
+      };
+    }
+    try {
+      return { response: await action(), logs };
+    } finally {
+      Object.assign(app.log, originals);
+    }
+  }
+
+  const { response: anonymous, logs: anonymousLogs } = await captureFailures(() => request('/happy-birthdays/mine'));
   assert.equal(anonymous.status, 403, 'Dashboard requires authentication');
+  assert.equal(anonymousLogs.length, 1, 'Middleware must capture failures rejected before the controller');
+  assert.equal(anonymousLogs[0].status, anonymous.status);
+  assert.equal(anonymousLogs[0].route, '/api/happy-birthdays/mine');
+  assert.equal(anonymousLogs[0].requestId, anonymous.failureRequestId);
+  assert.equal(anonymousLogs[0].hasAuthorization, false);
+  const { response: invalidSession, logs: sessionLogs } = await captureFailures(() => request('/users/me', { token: 'regression-invalid-jwt' }));
+  assert.equal(invalidSession.status, 401);
+  assert.equal(sessionLogs.length, 1);
+  assert.equal(sessionLogs[0].endpoint, '/api/users/me');
+  assert.equal(sessionLogs[0].reason, 'authentication_failed');
+  assert.equal(sessionLogs[0].requestId, invalidSession.failureRequestId);
+  assert.equal(sessionLogs[0].hasAuthorization, true);
   const password = 'RegressionOnly-Password42!';
   await app.plugin('users-permissions').service('user').edit(user.id, { password });
   const rejectedLogin = await request('/auth/local', {
@@ -81,6 +114,56 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   assert.equal(storyPricing.status, 200);
   assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500, originalINR: null, originalUSD: null });
   await require('./premium-pricing-regression.cjs')(app, user, celebration, request, serverToken.accessKey);
+  const standardData = {
+    personname: 'HTTP Standard', personemail: 'http-standard@example.invalid',
+    hostname: 'Regression Creator', hostemail: user.email, owner: user.id,
+    customroute: 'http-standard-create-contract', country: 'IN',
+    birthdaymessages: ['Happy birthday!', 'First memory', 'Second memory', 'Third memory'],
+    templateId: 'classic', musicId: 'none',
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  };
+  const { response: unsupportedHeadline, logs: validationLogs } = await captureFailures(() => request('/happy-birthdays?status=published', {
+    token: serverToken.accessKey, method: 'POST',
+    body: { data: { ...standardData, message: 'Happy birthday!' } },
+  }));
+  assert.equal(unsupportedHeadline.status, 400, 'A separate message attribute is not in the CMS schema');
+  assert.match(unsupportedHeadline.body.error.message, /message/i);
+  assert.equal(validationLogs.length, 1);
+  assert.equal(validationLogs[0].reason, 'invalid_field');
+  assert.equal(validationLogs[0].invalidField, 'message');
+  assert.equal(validationLogs[0].status, unsupportedHeadline.status);
+  assert.equal(validationLogs[0].requestId, unsupportedHeadline.failureRequestId);
+  assert.ok(['api-token', 'content-api-token'].includes(validationLogs[0].authStrategy));
+  assert.equal(JSON.stringify(validationLogs).includes(serverToken.accessKey), false);
+  assert.equal(JSON.stringify(validationLogs).includes(user.email), false);
+  const { response: standardCreated, logs: successLogs } = await captureFailures(() => request('/happy-birthdays?status=published', {
+    token: serverToken.accessKey, method: 'POST', body: { data: standardData },
+  }));
+  assert.equal(standardCreated.status, 201, 'The frontend payload must succeed on its first schema-valid write');
+  assert.deepEqual(successLogs, []);
+  assert.equal(standardCreated.failureRequestId, null);
+  assert.deepEqual(standardCreated.body.data.birthdaymessages, standardData.birthdaymessages);
+  const storedStandard = await app.documents('api::happy-birthday.happy-birthday').findOne({
+    documentId: standardCreated.body.data.documentId, status: 'published', populate: ['owner'],
+  });
+  assert.deepEqual(storedStandard.birthdaymessages, standardData.birthdaymessages);
+  assert.equal(storedStandard.owner.id, user.id);
+  assert.ok(storedStandard.publishedAt);
+  for (const customroute of ['a', 'ab']) {
+    const shortRoute = await request('/happy-birthdays?status=published', {
+      token: serverToken.accessKey, method: 'POST',
+      body: { data: { ...standardData, customroute } },
+    });
+    assert.equal(shortRoute.status, 400, 'Strapi must keep the three-character minimum');
+    assert.match(shortRoute.body.error.message, /customroute must be at least 3 characters/);
+    assert.equal(await app.db.query('api::happy-birthday.happy-birthday').count({ where: { customroute } }), 0);
+  }
+  const minimumRoute = await request('/happy-birthdays?status=published', {
+    token: serverToken.accessKey, method: 'POST',
+    body: { data: { ...standardData, customroute: 'abc' } },
+  });
+  assert.equal(minimumRoute.status, 201, 'A valid three-character route is supported');
+  assert.equal(minimumRoute.body.data.customroute, 'abc');
   const duplicate = await request('/happy-birthdays', {
     token: serverToken.accessKey,
     method: 'POST',

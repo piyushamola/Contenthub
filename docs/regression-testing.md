@@ -25,6 +25,16 @@ The runner supports macOS and Linux (`/tmp` and `/dev/null`), including the Ubun
 
 ## What is protected
 
+- Scoped API failure logging for celebration and account endpoints: status/method
+  grouping, correlation headers, validation field names, privacy filtering,
+  unchanged request outcomes and logger failure isolation. Unit and real HTTP
+  coverage are added but unrun for this source-only request. See
+  [API failure logs](api-failure-logs.md) for search terms and deployment details.
+- The real HTTP creation contract also covers the existing `customroute`
+  three-character minimum: one-/two-character names leave no record, while a
+  three-character name publishes. These added cases are unrun for the
+  production-log follow-up request.
+
 - Celebration email delivery: draft rows send nothing; the first committed publication claims one persistent, uniquely keyed delivery. Updates, republishing and restart backfills cannot resend it. SMTP failures are recorded without automatic retries. Provider and auth-template Reply-To use `wishhappybday@gmail.com`. Covered by `tests/email-settings.test.js` and `tests/helpers/celebration-email-regression.cjs` in the existing integration gate.
 
 - Pricing conversion to payment units for Standard Premium and Birthday Story;
