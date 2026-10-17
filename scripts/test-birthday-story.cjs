@@ -119,6 +119,11 @@ let app;
     () => service.read(draft.documentId, user.id + 100),
     /not found/,
   );
+  assert.equal(
+    (await service.read(draft.documentId, user.id + 100, true)).documentId,
+    draft.documentId,
+    'An authorized admin read can access a story without changing its owner',
+  );
   const files = [];
   for (let index = 0; index < 5; index++) {
     const file = await app.db.query('plugin::upload.file').create({

@@ -91,8 +91,11 @@ module.exports = ({ strapi }) => ({
       return { wish, wishes };
     });
   },
-  async read(documentId, ownerId) {
-    const entry = await this.owned(documentId, ownerId);
+  async read(documentId, ownerId, isAdmin = false) {
+    const entry = isAdmin
+      ? await this.draft(documentId)
+      : await this.owned(documentId, ownerId);
+    if (!entry) throw new Error('Story not found');
     const generatedDraftLink = isInternalStoryDraftLink(entry);
     return {
       documentId,

@@ -16,7 +16,7 @@ module.exports = ({ strapi }) => ({
   ),
   wish: action(strapi, (s, c, b) => service(s).addWish(c.params.slug, b)),
   read: action(strapi, (s, c, b) =>
-    service(s).read(c.params.documentId, b.ownerId),
+    service(s).read(c.params.documentId, b.ownerId, b.admin === true),
   ),
   save: action(strapi, (s, c, b) =>
     service(s).save(c.params.documentId, b.ownerId, b.content, b.revision, {
