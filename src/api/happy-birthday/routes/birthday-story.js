@@ -9,6 +9,12 @@ module.exports = {
   routes: [
     {
       method: 'POST',
+      path: '/birthday-stories/from-standard/:slug',
+      handler: 'birthday-story.fromStandard',
+      config,
+    },
+    {
+      method: 'POST',
       path: '/birthday-stories',
       handler: 'birthday-story.create',
       config,

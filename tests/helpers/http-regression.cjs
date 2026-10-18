@@ -114,6 +114,7 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   assert.equal(storyPricing.status, 200);
   assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500, originalINR: null, originalUSD: null });
   await require('./premium-pricing-regression.cjs')(app, user, celebration, request, serverToken.accessKey);
+  await require('./story-from-standard-regression.cjs')(app, user, request, serverToken.accessKey, token, other.id);
   const standardData = {
     personname: 'HTTP Standard', personemail: 'http-standard@example.invalid',
     hostname: 'Regression Creator', hostemail: user.email, owner: user.id,

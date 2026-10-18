@@ -7,18 +7,57 @@ const {
   isInternalStoryDraftLink,
   isInternalStoryDraftRoute,
 } = require('../utils/birthday-story');
-const { celebrationExpiresAt } = require('../utils/celebration-expiry');
+const { celebrationExpiresAt, celebrationWindowEndMs } = require('../utils/celebration-expiry');
 const {
   isBeforeTrigger,
   presentSchedule,
   storyTriggerExpiry,
   storyTriggerPatch,
+  formatLocal,
+  timezoneForCountry,
 } = require('../utils/celebration-schedule');
 const UID = 'api::happy-birthday.happy-birthday';
 const PURCHASE = 'api::celebration-purchase.celebration-purchase';
 const populate = { owner: true, storyAssets: true };
 
+function standardMessages(value) {
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); }
+    catch { value = [value]; }
+    if (typeof value === 'string') value = [value];
+  }
+  return (Array.isArray(value) ? value : []).filter((message) =>
+    typeof message === 'string' && !message.trim().toLowerCase().startsWith('__wishhappybday_experience:'));
+}
+
 module.exports = ({ strapi }) => ({
+  async fromStandard(slug, ownerId, { country, browserTimeZone } = {}) {
+    if (!Number.isInteger(ownerId) || typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]{2,79}$/.test(slug))
+      throw new Error('Standard celebration not found');
+    const entry = await strapi.db.query(UID).findOne({
+      where: {
+        customroute: slug, owner: ownerId, publishedAt: { $notNull: true },
+        $or: [{ journeyType: 'standard' }, { journeyType: null }],
+      },
+      populate: { images: true },
+    });
+    if (!entry || !Number.isFinite(celebrationWindowEndMs(entry)) || celebrationWindowEndMs(entry) <= Date.now())
+      throw new Error('Standard celebration not found');
+    const messages = standardMessages(entry.birthdaymessages);
+    const headline = messages.length > 3 ? messages.shift() : messages[0] || '';
+    // This is a read. The original link, assets, payments and expiry are untouched.
+    return {
+      slug: entry.customroute,
+      forName: entry.personname || '', hostName: entry.hostname || '',
+      headline, musicId: entry.musicId || '',
+      triggerLocal: Date.parse(entry.triggerAt || '') > Date.now() + 120_000
+        ? formatLocal(entry.triggerAt, timezoneForCountry(country, browserTimeZone)) : '',
+      photos: (entry.images || []).slice(0, 3).map((asset, index) => ({
+        url: asset.url, name: asset.name, caption: messages[index] || '',
+      })),
+      captions: messages.slice(0, 3),
+    };
+  },
   async draft(documentId) {
     return strapi.db
       .query(UID)

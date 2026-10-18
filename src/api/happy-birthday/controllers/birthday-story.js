@@ -11,6 +11,9 @@ function action(strapi, run) {
   };
 }
 module.exports = ({ strapi }) => ({
+  fromStandard: action(strapi, (s, c, b) =>
+    service(s).fromStandard(c.params.slug, b.ownerId, { country: b.country, browserTimeZone: b.browserTimeZone }),
+  ),
   create: action(strapi, (s, c, b) =>
     service(s).create(b.ownerId, b.country, b.creationId),
   ),

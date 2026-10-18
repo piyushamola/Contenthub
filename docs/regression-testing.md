@@ -1,5 +1,40 @@
 # Regression checks
 
+## October 18 Standard to Story prefill
+
+The server-token-only `POST /api/birthday-stories/from-standard/:slug` reads a
+published, unexpired Standard celebration for the owner resolved by Next.js.
+It returns names, the existing headline and photo captions, music, up to three
+stored photo URLs, and a sufficiently future trigger converted into the new
+Story country/browser timezone. It creates no draft, copies no payment
+entitlement, and never changes the original Standard or its expiry. Browser
+JWTs, anonymous calls, another owner, Story sources, expired and deleted
+sources cannot use this read. The frontend provides the private same-origin
+photo copy and uploads each image as a new Story asset only at checkout.
+
+`tests/story-from-standard.test.js` covers mapping, owner/route/expiry rules,
+and future/live schedule handling. `tests/helpers/story-from-standard-regression.cjs`
+is called by the existing real HTTP regression helper and checks the actual
+policy/router/database contract, no-write read, owner isolation and schedule
+conversion. Matching frontend fixture/API/browser, mapper and real-stack
+coverage is in the sibling repository under `story-from-standard` and
+`standard-to-story`. No schema change or migration is required.
+
+**No tests, typechecks, builds, lint, browser verification or media renders
+were run for this request.** Deploy this backend endpoint before the frontend
+prefill UI. Existing generated type edits were not part of this change.
+
+The later explicit complete-regression request passed `npm run check`: 134 unit
+tests, real Strapi/SQLite and HTTP integration, disposable-server checks and
+the production admin build. The frontend's 734 browser/API cases, all 54 real
+cross-app journeys and 98 expanded iPhone cases also passed. The actual source
+route and ownership/no-write rules ran through real HTTP; the cross-app import
+case copied separate Story assets, verified simulated payment and published
+the Story while retaining unchanged free Standard access. See the
+[October 18 execution report](../../birthday-celebration/docs/test-runs/2026-10-18-full-regression.md)
+for failures, repairs, exact gates, artifacts and remaining limits. The
+no-execution paragraph above describes the original implementation request.
+
 Test execution is opt-in. Run these commands only when the current request
 explicitly asks for testing, using Node 22 (the supported runtime in
 `package.json`) and npm. From this repository:
