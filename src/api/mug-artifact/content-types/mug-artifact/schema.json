@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "mug_artifacts",
+  "info": {
+    "singularName": "mug-artifact",
+    "pluralName": "mug-artifacts",
+    "displayName": "mug-artifact"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    },
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "digest": {
+      "type": "string",
+      "private": true,
+      "unique": true,
+      "required": true,
+      "column": {
+        "unique": true
+      }
+    },
+    "encryptedBytes": {
+      "type": "text",
+      "private": true
+    },
+    "mime": {
+      "type": "string"
+    },
+    "byteLength": {
+      "type": "integer"
+    },
+    "width": {
+      "type": "integer"
+    },
+    "height": {
+      "type": "integer"
+    },
+    "retainUntil": {
+      "type": "datetime"
+    }
+  }
+}

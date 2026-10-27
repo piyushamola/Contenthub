@@ -156,6 +156,7 @@ async function main() {
   const apiToken = await app.admin.services['api-token'].create({
     name: 'fullstack-regression-server', description: 'Disposable database only', type: 'full-access', lifespan: null,
   });
+  const mugEnvironment = await require('../tests/helpers/mug-stack-configuration.cjs')(app, users, frontendOrigin);
   const orders = new Map();
   const payments = new Map();
   const providerCalls = [];
@@ -189,6 +190,12 @@ async function main() {
     }
     const body = ctx.request.body || {};
     const route = ctx.path.slice('/__regression'.length);
+    if (ctx.method === 'GET' && route === '/mugs') {
+      if (!/^[1-9][0-9]{0,24}$/.test(ctx.query.orderId || '')) { ctx.status=400; ctx.body={error:'Invalid synthetic order'}; return; }
+      const order = await app.db.query('api::shopify-mug-order.shopify-mug-order').findOne({where:{shopifyOrderId:ctx.query.orderId}});
+      const jobs = order ? await app.db.query('api::mug-job.mug-job').findMany({where:{orderKey:order.orderKey}}) : [];
+      ctx.body={order,jobs:jobs.map(job=>({state:job.state,lineId:job.lineId,providerId:job.providerId,reference:job.reference}))};return;
+    }
     if (ctx.method === 'GET' && route === '/state') {
       ctx.body = {
         paymentMode: mode, recordCount: await app.db.query(UID).count(),
@@ -293,6 +300,7 @@ async function main() {
   const ready = {
     version: 1, cmsUrl, paymentMode: mode, users,
     frontendEnv: {
+      ...mugEnvironment,
       CMS_URL: cmsUrl, STRAPI_URL: cmsUrl, AUTHORIZATION_TOKEN: apiToken.accessKey,
       PAYMENTS_AUTHORIZATION_TOKEN: apiToken.accessKey, RAZORPAY_KEY_ID: providerKeyId,
       NEXT_PUBLIC_RAZORPAY_KEY_ID: providerKeyId, RAZORPAY_WEBHOOK_SECRET: webhookSecret,

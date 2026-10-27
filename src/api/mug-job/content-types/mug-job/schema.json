@@ -1,0 +1,121 @@
+{
+  "kind": "collectionType",
+  "collectionName": "mug_jobs",
+  "info": {
+    "singularName": "mug-job",
+    "pluralName": "mug-jobs",
+    "displayName": "mug-job"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    },
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "jobKey": {
+      "type": "string",
+      "private": true,
+      "unique": true,
+      "required": true,
+      "column": {
+        "unique": true
+      }
+    },
+    "orderKey": {
+      "type": "string",
+      "private": true
+    },
+    "shopifyOrderId": {
+      "type": "string"
+    },
+    "lineId": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer"
+    },
+    "reference": {
+      "type": "string",
+      "private": true,
+      "unique": true,
+      "required": true,
+      "column": {
+        "unique": true
+      }
+    },
+    "designCode": {
+      "type": "string",
+      "private": true,
+      "unique": true,
+      "required": true,
+      "column": {
+        "unique": true
+      }
+    },
+    "state": {
+      "type": "enumeration",
+      "enum": [
+        "queued",
+        "intent",
+        "reconcile",
+        "submitted",
+        "fulfillment_intent",
+        "fulfillment_reconcile",
+        "fulfilled",
+        "hold"
+      ],
+      "default": "queued"
+    },
+    "leaseToken": {
+      "type": "string",
+      "private": true
+    },
+    "leaseUntil": {
+      "type": "datetime"
+    },
+    "nextRunAt": {
+      "type": "datetime"
+    },
+    "intentAt": {
+      "type": "datetime"
+    },
+    "intentToken": {
+      "type": "string",
+      "private": true
+    },
+    "requestDigest": {
+      "type": "string",
+      "private": true
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "providerStatus": {
+      "type": "string"
+    },
+    "tracking": {
+      "type": "json",
+      "private": true
+    },
+    "fulfillmentId": {
+      "type": "string"
+    },
+    "approval": {
+      "type": "json",
+      "private": true
+    },
+    "snapshot": {
+      "type": "json",
+      "private": true
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}

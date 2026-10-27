@@ -1,5 +1,9 @@
 # Regression checks
 
+## Personalized mug production boundary
+
+See [the Shopify handoff](shopify-production-handoff.md) and [execution report](test-runs/2026-10-27-mug-production.md). The workflow is default-off; unit, private HTTP/database, PostgreSQL and cross-app coverage use synthetic data and provider doubles. No live order or Shopify configuration write belongs in an automated gate.
+
 ## October 18 Standard to Story prefill
 
 The server-token-only `POST /api/birthday-stories/from-standard/:slug` reads a

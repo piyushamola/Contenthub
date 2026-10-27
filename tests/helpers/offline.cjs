@@ -8,7 +8,9 @@ const originalConnect = Socket.prototype.connect;
 Socket.prototype.connect = function (...args) {
   const options = Array.isArray(args[0]) ? args[0][0] : args[0];
   // Permit only explicit loopback TCP connections for the real HTTP tests.
-  if (!options || typeof options !== 'object' || !isLoopback(options.host)) fail();
+  const disposablePostgres = process.env.REGRESSION_DISPOSABLE_POSTGRES === 'true' &&
+    typeof options === 'number' && options === Number(process.env.DATABASE_PORT) && args[1] === '127.0.0.1';
+  if (!disposablePostgres && (!options || typeof options !== 'object' || !isLoopback(options.host))) fail();
   return originalConnect.apply(this, args);
 };
 const originalFetch = globalThis.fetch;
