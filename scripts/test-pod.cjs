@@ -9,7 +9,7 @@ if (process.env.DATABASE_CLIENT === 'postgres' && (process.env.DATABASE_HOST !==
     process.env.DATABASE_NAME !== 'postgres' || process.env.REGRESSION_DISPOSABLE_POSTGRES !== 'true')) throw new Error('Disposable PostgreSQL required');
 let app;
 (async () => {
-  const publicDir = path.join(process.env.TMPDIR, 'mug-public');
+  const publicDir = path.join(process.env.TMPDIR, 'pod-public');
   await fs.mkdir(path.join(publicDir, 'uploads'), { recursive: true });
   if (process.env.DATABASE_CLIENT === 'sqlite') {
     process.env.DATABASE_FILENAME = path.relative(process.cwd(), process.env.DATABASE_FILENAME);
@@ -20,15 +20,15 @@ let app;
   app.plugin('email').service('email').send = async () => {};
   const role = await app.db.query('plugin::users-permissions.role').findOne({ where: { type: 'authenticated' } });
   const user = await app.db.query('plugin::users-permissions.user').create({ data: {
-    username: 'mug-http-user', email: 'mug-http@example.test', provider: 'local', confirmed: true, role: role.id,
+    username: 'pod-http-user', email: 'pod-http@example.test', provider: 'local', confirmed: true, role: role.id,
   } });
   const jwt = app.plugin('users-permissions').service('jwt').issue({ id: user.id });
-  const broad = await app.admin.services['api-token'].create({ name: 'mug-broad-rejected', type: 'full-access', lifespan: null });
+  const broad = await app.admin.services['api-token'].create({ name: 'pod-broad-rejected', type: 'full-access', lifespan: null });
   await new Promise((resolve, reject) => {
     app.server.httpServer.once('error', reject); app.server.listen(0, '127.0.0.1', resolve);
   });
   const base = 'http://127.0.0.1:' + app.server.httpServer.address().port + '/api';
-  await require('../tests/helpers/shopify-mug-regression.cjs')(app, base, jwt, broad.accessKey);
+  await require('../tests/helpers/pod-regression.cjs')(app, base, jwt, broad.accessKey);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   if (app) await app.destroy();
 });

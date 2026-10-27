@@ -1,8 +1,8 @@
 # Regression checks
 
-## Personalized mug production boundary
+## Generic Shopify–Qikink connector
 
-See [the Shopify handoff](shopify-production-handoff.md) and [execution report](test-runs/2026-10-27-mug-production.md). The workflow is default-off; unit, private HTTP/database, PostgreSQL and cross-app coverage use synthetic data and provider doubles. No live order or Shopify configuration write belongs in an automated gate.
+See [the Shopify handoff](shopify-production-handoff.md) and [generic execution report](test-runs/2026-10-27-generic-pod.md). Unit, private HTTP/database and real cross-app checks cover generic product mappings, multiple placements, capture, leases, cancellation and uncertain-result reconciliation. `npm run test:pod` and `npm run test:pod:postgres` in Contenthub run focused isolated database checks. No live provider writes belong in these gates.
 
 ## October 18 Standard to Story prefill
 

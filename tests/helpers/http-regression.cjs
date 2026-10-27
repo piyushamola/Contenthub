@@ -107,7 +107,7 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   const serverToken = await app.admin.services['api-token'].create({
     name: 'regression-only', description: 'Temporary test database only', type: 'full-access', lifespan: null,
   });
-  await require('./shopify-mug-regression.cjs')(app, base, token, serverToken.accessKey);
+  await require('./pod-regression.cjs')(app, base, token, serverToken.accessKey);
   const pricing = await request('/celebration-payments/pricing', { token: serverToken.accessKey });
   assert.equal(pricing.status, 200);
   assert.deepEqual(pricing.body, { INR: 900, USD: 100, originalINR: null, originalUSD: null });

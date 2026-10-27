@@ -1,10 +1,10 @@
 {
   "kind": "collectionType",
-  "collectionName": "mug_jobs",
+  "collectionName": "pod_orders",
   "info": {
-    "singularName": "mug-job",
-    "pluralName": "mug-jobs",
-    "displayName": "mug-job"
+    "singularName": "pod-order",
+    "pluralName": "pod-orders",
+    "displayName": "Private POD order"
   },
   "options": {
     "draftAndPublish": false
@@ -18,49 +18,58 @@
     }
   },
   "attributes": {
-    "jobKey": {
-      "type": "string",
-      "private": true,
-      "unique": true,
-      "required": true,
-      "column": {
-        "unique": true
-      }
-    },
     "orderKey": {
       "type": "string",
+      "required": true,
+      "unique": true,
       "private": true
-    },
-    "shopifyOrderId": {
-      "type": "string"
-    },
-    "lineId": {
-      "type": "string"
-    },
-    "revision": {
-      "type": "integer"
     },
     "reference": {
       "type": "string",
-      "private": true,
-      "unique": true,
       "required": true,
-      "column": {
-        "unique": true
-      }
+      "unique": true,
+      "private": true
     },
-    "designCode": {
+    "shop": {
       "type": "string",
-      "private": true,
-      "unique": true,
       "required": true,
-      "column": {
-        "unique": true
-      }
+      "private": true
+    },
+    "shopifyOrderId": {
+      "type": "string",
+      "required": true,
+      "private": true
+    },
+    "snapshot": {
+      "type": "json",
+      "private": true
+    },
+    "sourceDigest": {
+      "type": "string",
+      "private": true
+    },
+    "sourceUpdatedAt": {
+      "type": "datetime",
+      "private": true
+    },
+    "issues": {
+      "type": "json",
+      "private": true
+    },
+    "stopRequested": {
+      "type": "boolean",
+      "default": false,
+      "private": true
+    },
+    "erased": {
+      "type": "boolean",
+      "default": false,
+      "private": true
     },
     "state": {
       "type": "enumeration",
       "enum": [
+        "ignored",
         "queued",
         "intent",
         "reconcile",
@@ -70,20 +79,25 @@
         "fulfilled",
         "hold"
       ],
-      "default": "queued"
+      "default": "ignored",
+      "required": true,
+      "private": true
     },
     "leaseToken": {
       "type": "string",
       "private": true
     },
     "leaseUntil": {
-      "type": "datetime"
+      "type": "datetime",
+      "private": true
     },
     "nextRunAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "private": true
     },
     "intentAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "private": true
     },
     "intentToken": {
       "type": "string",
@@ -94,28 +108,28 @@
       "private": true
     },
     "providerId": {
-      "type": "string"
+      "type": "string",
+      "private": true
     },
     "providerStatus": {
-      "type": "string"
+      "type": "string",
+      "private": true
     },
     "tracking": {
       "type": "json",
       "private": true
     },
     "fulfillmentId": {
-      "type": "string"
-    },
-    "approval": {
-      "type": "json",
+      "type": "string",
       "private": true
     },
-    "snapshot": {
-      "type": "json",
+    "fulfillmentToken": {
+      "type": "string",
       "private": true
     },
     "reason": {
-      "type": "string"
+      "type": "string",
+      "private": true
     }
   }
 }

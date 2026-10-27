@@ -12,8 +12,8 @@ if (Number(process.versions.node.split('.')[0]) !== 22) {
 }
 
 const mode = process.argv[2];
-if (!['unit', 'integration', 'server', 'build', 'mug', 'mug-postgres'].includes(mode)) {
-  console.error('Usage: node scripts/run-check.cjs unit|integration|server|build|mug|mug-postgres');
+if (!['unit', 'integration', 'server', 'build', 'pod', 'pod-postgres'].includes(mode)) {
+  console.error('Usage: node scripts/run-check.cjs unit|integration|server|build|pod|pod-postgres');
   process.exit(1);
 }
 
@@ -81,13 +81,13 @@ function startPostgres() {
     DATABASE_SSL: 'false', REGRESSION_DISPOSABLE_POSTGRES: 'true' });
 }
 try {
-  if (mode === 'mug-postgres') startPostgres();
+  if (mode === 'pod-postgres') startPostgres();
   const args = mode === 'unit'
     ? ['--require', offline, '--test', ...fs.readdirSync(path.join(root, 'tests'))
         .filter((name) => name.endsWith('.test.js') && (!selected.length || selected.includes(name.slice(0, -8)))).sort()
         .map((name) => path.join(root, 'tests', name))]
-    : mode === 'mug' || mode === 'mug-postgres'
-      ? ['--require', offline, 'scripts/test-shopify-mug.cjs']
+    : mode === 'pod' || mode === 'pod-postgres'
+      ? ['--require', offline, 'scripts/test-pod.cjs']
     : mode === 'integration'
       ? ['--require', offline, 'scripts/test-birthday-story.cjs']
       : mode === 'server'
