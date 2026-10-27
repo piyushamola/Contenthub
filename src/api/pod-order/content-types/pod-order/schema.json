@@ -1,0 +1,135 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pod_orders",
+  "info": {
+    "singularName": "pod-order",
+    "pluralName": "pod-orders",
+    "displayName": "Private POD order"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    },
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "orderKey": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "private": true
+    },
+    "reference": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "private": true
+    },
+    "shop": {
+      "type": "string",
+      "required": true,
+      "private": true
+    },
+    "shopifyOrderId": {
+      "type": "string",
+      "required": true,
+      "private": true
+    },
+    "snapshot": {
+      "type": "json",
+      "private": true
+    },
+    "sourceDigest": {
+      "type": "string",
+      "private": true
+    },
+    "sourceUpdatedAt": {
+      "type": "datetime",
+      "private": true
+    },
+    "issues": {
+      "type": "json",
+      "private": true
+    },
+    "stopRequested": {
+      "type": "boolean",
+      "default": false,
+      "private": true
+    },
+    "erased": {
+      "type": "boolean",
+      "default": false,
+      "private": true
+    },
+    "state": {
+      "type": "enumeration",
+      "enum": [
+        "ignored",
+        "queued",
+        "intent",
+        "reconcile",
+        "submitted",
+        "fulfillment_intent",
+        "fulfillment_reconcile",
+        "fulfilled",
+        "hold"
+      ],
+      "default": "ignored",
+      "required": true,
+      "private": true
+    },
+    "leaseToken": {
+      "type": "string",
+      "private": true
+    },
+    "leaseUntil": {
+      "type": "datetime",
+      "private": true
+    },
+    "nextRunAt": {
+      "type": "datetime",
+      "private": true
+    },
+    "intentAt": {
+      "type": "datetime",
+      "private": true
+    },
+    "intentToken": {
+      "type": "string",
+      "private": true
+    },
+    "requestDigest": {
+      "type": "string",
+      "private": true
+    },
+    "providerId": {
+      "type": "string",
+      "private": true
+    },
+    "providerStatus": {
+      "type": "string",
+      "private": true
+    },
+    "tracking": {
+      "type": "json",
+      "private": true
+    },
+    "fulfillmentId": {
+      "type": "string",
+      "private": true
+    },
+    "fulfillmentToken": {
+      "type": "string",
+      "private": true
+    },
+    "reason": {
+      "type": "string",
+      "private": true
+    }
+  }
+}

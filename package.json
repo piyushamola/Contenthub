@@ -17,7 +17,9 @@
     "seed:example": "node ./scripts/seed.js",
     "seed:gift-categories": "node ./scripts/seed-gift-categories.js",
     "start": "strapi start",
-    "strapi": "strapi"
+    "strapi": "strapi",
+    "test:pod": "node scripts/run-check.cjs pod",
+    "test:pod:postgres": "node scripts/run-check.cjs pod-postgres"
   },
   "dependencies": {
     "@_sh/strapi-plugin-ckeditor": "^6.0.1",

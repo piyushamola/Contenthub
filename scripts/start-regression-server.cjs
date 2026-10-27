@@ -153,6 +153,7 @@ async function main() {
     indiaPriceRupees: 9, otherCountriesPriceUsd: 1,
     storyIndiaPriceRupees: 36, storyOtherCountriesPriceUsd: 5,
   } });
+  const podEnvironment = await require('../tests/helpers/pod-stack-configuration.cjs')(app, frontendOrigin);
   const apiToken = await app.admin.services['api-token'].create({
     name: 'fullstack-regression-server', description: 'Disposable database only', type: 'full-access', lifespan: null,
   });
@@ -293,6 +294,7 @@ async function main() {
   const ready = {
     version: 1, cmsUrl, paymentMode: mode, users,
     frontendEnv: {
+      ...podEnvironment,
       CMS_URL: cmsUrl, STRAPI_URL: cmsUrl, AUTHORIZATION_TOKEN: apiToken.accessKey,
       PAYMENTS_AUTHORIZATION_TOKEN: apiToken.accessKey, RAZORPAY_KEY_ID: providerKeyId,
       NEXT_PUBLIC_RAZORPAY_KEY_ID: providerKeyId, RAZORPAY_WEBHOOK_SECRET: webhookSecret,
