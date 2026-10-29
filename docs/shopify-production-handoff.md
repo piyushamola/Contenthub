@@ -1,5 +1,9 @@
 # Shopify → Qikink: simple production handoff
 
+COD and the dedicated Strapi admin workflow extend this guide. See
+[the COD/admin handoff](shopify-cod-admin-handoff.md) for current payment rules,
+admin permissions, additive rollout and the five-topic webhook contract.
+
 This replaces the earlier mug-only review workflow. **It is automatic and generic:**
 Shopify paid order → Next.js → Qikink. Contenthub stores one private record per
 Shopify order so retries cannot submit it twice. There is no merchant approval
@@ -15,7 +19,7 @@ Planned deployed URL: `https://www.wishhappybdayto.me/api/shopify/pod-orders`.
 The route is not claimed to be deployed. Set `SHOPIFY_APP_URL` to its actual origin.
 
 Shopify app-owned topics, API version **2026-10**:
-`orders/paid`, `orders/updated`, `orders/cancelled`, `refunds/create`.
+`orders/create`, `orders/paid`, `orders/updated`, `orders/cancelled`, `refunds/create`.
 The official Shopify SDK verifies the raw-body HMAC before parsing. A successful
 response contains only `{"received":true}` after durable capture. Failed storage
 returns 503 for Shopify retry. Do not register both old and new callbacks.
@@ -103,7 +107,7 @@ instead of silently dropping a customized line. Ordinary unmapped items are left
 for their existing fulfillment flow.
 
 Prices come from the actual paid Shopify order, including discount allocations;
-there is no fixed mug price. Supported delivery is prepaid INR to India, quantity
+there is no fixed mug price. Supported delivery is prepaid or eligible full-order COD in INR to India, quantity
 1–100 per line. A discount that cannot be represented as exact per-unit paise is
 held rather than rounded silently. Mixed carts send only mapped lines. One Qikink
 order contains those lines and their distinct design identities. The declared
@@ -134,7 +138,7 @@ native app imports orders; the MCP operator must confirm its SKU/variant exclusi
    and preview for every configured placement.
 4. Confirm native-import exclusion and provide the merchant-managed location ID.
 5. After separately approved deployment, verify the callback and create/update the
-   four app-owned subscriptions. Remove obsolete/duplicate subscriptions deliberately.
+   five admin-created subscriptions. Remove obsolete/duplicate subscriptions deliberately.
 6. Coordinate the first paid order and provider costs before enabling live submission.
 
 Codex did not make any of those Shopify changes.

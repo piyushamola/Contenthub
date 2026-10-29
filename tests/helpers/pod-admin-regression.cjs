@@ -1,0 +1,81 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {createHash}=require('node:crypto');
+const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+module.exports=async(app,base,userJwt,apiToken)=>{
+  const origin=base.replace(/\/api$/,'');
+  const call=async(path,token,body)=>{const response=await fetch(origin+'/pod-orders'+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+    return {status:response.status,body:await response.json()};};
+  for(const token of ['',userJwt,apiToken])assert.ok([401,403].includes((await call('/orders',token)).status));
+  const admin=async(name,actions)=>{
+    const role=await app.admin.services.role.create({name:'POD '+name,description:'Synthetic regression role'});
+    await app.admin.services.role.assignPermissions(role.id,actions.map(action=>({action:'plugin::pod-orders.'+action})));
+    await app.admin.services.user.create({firstname:'Synthetic',lastname:name,email:`pod-${name}@example.test`,password:'Synthetic-test-password-123!',isActive:true,roles:[role.id]});
+    const response=await fetch(origin+'/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:`pod-${name}@example.test`,password:'Synthetic-test-password-123!'})});
+    assert.equal(response.status,200);const data=await response.json();return data.data.token;
+  };
+  const viewer=await admin('viewer',['read']),noter=await admin('noter',['read','notes']),operator=await admin('operator',['read','notes','operate']);
+  const raw=await fetch(origin+'/content-manager/collection-types/api::pod-order.pod-order',{headers:{Authorization:'Bearer '+operator}});assert.equal(raw.status,403);
+  assert.equal((await fetch(origin+'/api/pod-order-audits')).status,404);
+  const service=app.service('api::pod-order.pod-order');
+  const seed=async(id,mode='prepaid')=>{
+    const snapshot={orderId:id,orderNumber:'#'+id,paymentMode:mode,financialStatus:mode==='cod'?'pending':'paid',currency:'INR',test:false,totalPaise:39900,
+      amounts:{codCollectiblePaise:mode==='cod'?39900:0,outstandingPaise:mode==='cod'?39900:0,shippingPaise:5000,taxPaise:0,discountPaise:0},
+      lines:[{id:'11',variantId:'101',quantity:1,unitPricePaise:34900,product:{sku:'SYNTHETIC-MUG'},designs:[{key:'front',artworkUrl:'https://assets.example.test/original.png',previewUrl:'https://assets.example.test/preview.png'}]}],shipping:{}};
+    const body={op:'capture',shop:'fixture.myshopify.com',orderId:id,sourceUpdatedAt:'2026-10-29T12:00:00Z',snapshot,issues:[],stop:false};body.sourceDigest=hash({snapshot,issues:[],stop:false});
+    const captured=await service.state(body);const row=(await service.state({op:'get',orderKey:captured.orderKey})).order;
+    return {row,body};
+  };
+  // Prior independent database cases intentionally leave queued records.
+  await app.db.query('api::pod-order.pod-order').updateMany({where:{state:'queued'},data:{state:'hold'}});
+  const {row,body}=await seed('99001','cod');
+  const listing=await call('/orders?paymentMode=cod&search=99001&page=1&pageSize=1',viewer);
+  assert.equal(listing.status,200);assert.equal(listing.body.pagination.total,1);assert.equal(listing.body.orders[0].codCollectiblePaise,39900);
+  for(const hidden of ['snapshot','orderKey','reference','leaseToken','intentToken','sourceDigest','requestDigest'])assert.equal(hidden in listing.body.orders[0],false);
+  const detail=await call('/orders/'+row.id,viewer);assert.equal(detail.status,200);assert.equal(detail.body.shopifyOrderId,'99001');
+  const request={revision:0,reason:'Synthetic operational check'};
+  assert.equal((await call(`/orders/${row.id}/notes`,viewer,{...request,notes:'Synthetic internal note'})).status,403);
+  assert.equal((await call(`/orders/${row.id}/pause`,noter,request)).status,403);
+  assert.equal((await call(`/orders/${row.id}/notes`,noter,{...request,notes:'Synthetic internal note',state:'queued'})).status,400);
+  const unsubscribe=app.db.lifecycles.subscribe({models:['api::pod-order-audit.pod-order-audit'],beforeCreate(){throw new Error('synthetic audit failure');}});
+  assert.equal((await call(`/orders/${row.id}/notes`,noter,{...request,notes:'Must roll back'})).status,503);
+  unsubscribe();assert.equal((await call('/orders/'+row.id,viewer)).body.adminNotes,'');
+  const noted=await call(`/orders/${row.id}/notes`,noter,{...request,notes:'Synthetic internal note'});assert.equal(noted.status,200);
+  assert.equal((await call(`/orders/${row.id}/notes`,noter,{...request,notes:'Lost update'})).status,409);
+  console.log('PASS: admin endpoints reject anonymous/user/API tokens; RBAC separates viewing, notes and operations; filtering/pagination are private.');
+  const claimed=(await service.state({op:'claim'})).order;assert.equal(claimed.id,row.id);
+  const paused=await call(`/orders/${row.id}/pause`,operator,{...request,revision:1});assert.equal(paused.status,200);
+  await assert.rejects(()=>service.state({op:'intent',orderKey:row.orderKey,leaseToken:claimed.leaseToken,sourceDigest:body.sourceDigest,requestDigest:'a'.repeat(64)}));
+  const correction={...request,revision:2,lineId:'11',key:'front',artworkUrl:'https://assets.example.test/corrected.png',previewUrl:'https://assets.example.test/corrected-preview.png'};
+  assert.equal((await call(`/orders/${row.id}/correct`,operator,{...correction,quantity:3})).status,400);
+  assert.equal((await call(`/orders/${row.id}/correct`,operator,{...correction,artworkUrl:'file:///private'})).status,400);
+  assert.equal((await call(`/orders/${row.id}/correct`,operator,correction)).status,200);
+  const resumed=await call(`/orders/${row.id}/resume`,operator,{...request,revision:3});assert.equal(resumed.status,200);assert.equal(resumed.body.state,'validating');
+  const validating=(await service.state({op:'claim'})).order;assert.equal(validating.state,'validating');
+  await assert.rejects(()=>service.state({op:'intent',orderKey:row.orderKey,leaseToken:validating.leaseToken,sourceDigest:body.sourceDigest,requestDigest:'a'.repeat(64)}));
+  await service.state({op:'ready',orderKey:row.orderKey,leaseToken:validating.leaseToken,sourceDigest:body.sourceDigest});
+  const ready=(await service.state({op:'claim'})).order;
+  await service.state({op:'intent',orderKey:row.orderKey,leaseToken:ready.leaseToken,sourceDigest:body.sourceDigest,requestDigest:'a'.repeat(64)});
+  assert.equal((await call(`/orders/${row.id}/correct`,operator,{...correction,revision:4})).status,409);
+  assert.equal((await call(`/orders/${row.id}/pause`,operator,{...request,revision:4})).status,409);
+  const audited=await call('/orders/'+row.id,viewer);assert.equal(audited.body.audit.length,4);
+  const audit=JSON.stringify(audited.body.audit);assert.equal(audit.includes('corrected.png'),false);assert.equal(audit.includes('Synthetic internal note'),false);
+  await service.state({op:'capture',shop:body.shop,orderId:body.orderId,stop:true});
+  console.log('PASS: pause revokes a worker lease; corrections require validation; intent locks fulfillment inputs; all changes have a private actor audit.');
+  const second=await seed('99002');
+  const competing=(await service.state({op:'claim'})).order;assert.equal(competing.id,second.row.id);
+  const race=await Promise.allSettled([service.state({op:'intent',orderKey:second.row.orderKey,leaseToken:competing.leaseToken,sourceDigest:second.body.sourceDigest,requestDigest:'b'.repeat(64)}),
+    service.adminAction(second.row.id,'pause',request,1)]);
+  assert.equal(race.filter(r=>r.status==='fulfilled').length,1);
+  const final=(await service.state({op:'get',orderKey:second.row.orderKey})).order;
+  assert.ok(['paused','intent'].includes(final.state));
+  const stale={...second.body,snapshot:{...second.body.snapshot,financialStatus:'pending'}};stale.sourceDigest=hash({snapshot:stale.snapshot,issues:[],stop:false});
+  await service.state(stale);assert.equal((await service.state({op:'get',orderKey:second.row.orderKey})).order.snapshot.financialStatus,'paid');
+  const legacy=await app.db.query('api::pod-order.pod-order').create({data:{documentId:'synthetic-legacy-admin',orderKey:'f'.repeat(64),reference:'legacy123',shop:body.shop,shopifyOrderId:'99003',state:'hold',snapshot:{orderId:'99003',financialStatus:'paid',totalPaise:34900,lines:[]}}});
+  const old=await call('/orders/'+legacy.id,viewer);assert.equal(old.status,200);assert.equal(old.body.paymentMode,'prepaid');assert.equal(old.body.totalPaise,34900);
+  const editable=await seed('99004'),changed={...editable.body,snapshot:{...editable.body.snapshot,totalPaise:40900},sourceUpdatedAt:'2026-10-29T12:10:00Z'};
+  changed.sourceDigest=hash({snapshot:changed.snapshot,issues:[],stop:false});await service.state(changed);
+  assert.equal((await call(`/orders/${editable.row.id}/pause`,operator,request)).status,409);
+  assert.equal((await call(`/orders/${editable.row.id}/notes`,noter,{...request,notes:'Stale browser edit'})).status,409);
+  console.log('PASS: pause/intent race has one winner; legacy records remain readable with unchanged references/history.');
+};

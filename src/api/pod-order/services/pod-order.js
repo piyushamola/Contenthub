@@ -19,6 +19,7 @@ module.exports = ({ strapi }) => {
     });
   }
   return {
+    ...require('../utils/admin-orders')({strapi,locked}),
     async state(body) {
       if (!body || typeof body !== 'object' || Array.isArray(body)) fail('invalid_request');
       if (body.op === 'get' && !body.orderKey && validId(body.orderId) && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(body.shop || '')) {
@@ -39,20 +40,30 @@ module.exports = ({ strapi }) => {
         }
         await locked(orderKey, async current => {
           if (current.erased) return;
-          if (body.stop === true || current.stopRequested) {
-            await query().update({where:{id:current.id},data:{stopRequested:true,state:'hold',reason:'cancelled_or_refunded'}}); return;
+          if (current.stopRequested) return;
+          if (body.stop === true) {
+            await query().update({where:{id:current.id},data:{stopRequested:true,state:'hold',reason:'cancelled_or_refunded',
+              adminRevision:(current.adminRevision||0)+1,leaseToken:null,leaseUntil:null}}); return;
           }
           if (current.sourceUpdatedAt && Date.parse(body.sourceUpdatedAt) < Date.parse(current.sourceUpdatedAt)) return;
+          if (current.sourceUpdatedAt && Date.parse(current.sourceUpdatedAt)===Date.parse(body.sourceUpdatedAt) && current.snapshot?.financialStatus==='paid' && body.snapshot.financialStatus==='pending') return;
           if (current.sourceDigest === body.sourceDigest) return;
           const changedAfterIntent = !!current.intentAt || !!current.providerId;
           const removed = current.snapshot?.lines?.length && !body.snapshot.lines.length;
           if (changedAfterIntent || removed) {
             await query().update({where:{id:current.id},data:{state:'hold',...(removed?{stopRequested:true}:{}),
+              adminRevision:(current.adminRevision||0)+1,
               reason:changedAfterIntent?'changed_after_submission':'personalized_lines_removed'}}); return;
           }
+          const paused=['paused','validating'].includes(current.state);
           await query().update({where:{id:current.id},data:{snapshot:body.snapshot,sourceDigest:body.sourceDigest,
+            adminRevision:(current.adminRevision||0)+(current.snapshot?1:0),
+            orderNumber:body.snapshot.orderNumber||body.orderId,paymentMode:body.snapshot.paymentMode||(body.snapshot.financialStatus==='paid'?'prepaid':'unknown'),
+            totalPaise:body.snapshot.totalPaise,codCollectiblePaise:body.snapshot.amounts?.codCollectiblePaise||0,
+            corrections:null,correctionSourceDigest:null,
             sourceUpdatedAt:body.sourceUpdatedAt,issues:body.issues,state:body.issues.length?'hold':body.snapshot.lines.length?'queued':'ignored',
-            reason:body.issues.length?'invalid_order':null,leaseToken:null,leaseUntil:null,nextRunAt:future(0)}});
+            ...(paused?{state:'paused'}:{}),reason:paused?'source_changed_revalidate':body.issues.length?body.issues[0]:null,
+            leaseToken:null,leaseUntil:null,nextRunAt:future(0)}});
         });
         return {orderKey};
       }
@@ -60,7 +71,7 @@ module.exports = ({ strapi }) => {
         return strapi.db.transaction(async ({trx}) => {
           const now = new Date();
           let selection = trx(strapi.db.metadata.get(UID).tableName)
-            .whereIn('state',['queued','intent','reconcile','submitted','fulfillment_intent','fulfillment_reconcile','fulfilled'])
+            .whereIn('state',['validating','queued','intent','reconcile','submitted','fulfillment_intent','fulfillment_reconcile','fulfilled'])
             .where(part => part.whereNull('lease_until').orWhere('lease_until','<',now))
             .where(part => part.whereNull('next_run_at').orWhere('next_run_at','<=',now)).orderBy('id').forUpdate();
           if (['pg','postgres'].includes(strapi.db.connection.client.config.client)) selection = selection.skipLocked();
@@ -74,7 +85,7 @@ module.exports = ({ strapi }) => {
         if (body.op === 'get') return {order:current};
         if (body.op === 'erase') {
           if (body.confirmErase !== true) fail('invalid_request');
-          await query().update({where:{id:current.id},data:{snapshot:null,tracking:null,erased:true,stopRequested:true,state:'hold',reason:'privacy_erased'}});
+          await query().update({where:{id:current.id},data:{snapshot:null,tracking:null,corrections:null,adminNotes:null,erased:true,stopRequested:true,state:'hold',reason:'privacy_erased'}});
           return {externalDeletionRequired:!!current.intentAt};
         }
         const lease = typeof body.leaseToken === 'string' && body.leaseToken === current.leaseToken && Date.parse(current.leaseUntil) > Date.now();
@@ -82,7 +93,10 @@ module.exports = ({ strapi }) => {
         const lateFulfillmentResult = body.op === 'fulfilled' && body.leaseToken === current.fulfillmentToken;
         if (!lease && !lateProviderResult && !lateFulfillmentResult) fail();
         let data;
-        if (body.op === 'intent') {
+        if (body.op === 'ready') {
+          if(current.state!=='validating'||current.intentAt||current.providerId||current.stopRequested||current.issues?.length||body.sourceDigest!==current.sourceDigest)fail();
+          data={state:'queued',reason:null,nextRunAt:future(0)};
+        } else if (body.op === 'intent') {
           if (current.state !== 'queued' || current.intentAt || current.providerId || current.stopRequested || current.issues?.length ||
             !current.snapshot?.lines?.length || body.sourceDigest !== current.sourceDigest || !validHash(body.requestDigest)) fail();
           data={state:'intent',intentAt:future(0),intentToken:current.leaseToken,requestDigest:body.requestDigest};

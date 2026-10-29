@@ -7,8 +7,14 @@ module.exports = async (app, origin) => {
     permissions:['api::pod-order.pod-order.state']})).accessKey;
   const placement={key:'front',placementSku:'fr',providerPlacement:'Front',widthInches:8.5,heightInches:3.5,pixelWidth:2550,pixelHeight:1050,artworkProperty:'Print artwork',previewProperty:'Approved preview'};
   const apparel={key:'front',placementSku:'fr',providerPlacement:'Front',widthInches:12,heightInches:16,pixelWidth:3600,pixelHeight:4800,artworkProperty:'Front artwork',previewProperty:'Front preview'};
+  const role=await app.admin.services.role.create({name:'POD stack operator',description:'Disposable browser regression only'});
+  await app.admin.services.role.assignPermissions(role.id,['read','notes','operate'].map(action=>({action:'plugin::pod-orders.'+action})));
+  await app.admin.services.user.create({firstname:'Synthetic',lastname:'Operator',email:'pod-operator@example.test',
+    password:'Synthetic-test-password-123!',isActive:true,roles:[role.id]});
   return {SHOPIFY_POD_ENABLED:'true',SHOPIFY_SHOP_DOMAIN:'fixture.myshopify.com',SHOPIFY_APP_CLIENT_ID:'synthetic-app',
-    SHOPIFY_APP_CLIENT_SECRET:'synthetic-signing-secret',SHOPIFY_APP_URL:origin,POD_RELAY_SECRET:secret,POD_CMS_TOKEN:token,
+    SHOPIFY_APP_CLIENT_SECRET:'synthetic-app-client-secret',SHOPIFY_WEBHOOK_SECRET:'synthetic-admin-webhook-secret',
+    POD_ADMIN_TEST_EMAIL:'pod-operator@example.test',POD_ADMIN_TEST_PASSWORD:'Synthetic-test-password-123!',
+    SHOPIFY_APP_URL:origin,POD_RELAY_SECRET:secret,POD_CMS_TOKEN:token,
     POD_WORKER_SECRET:'synthetic-worker-secret-at-least-32-characters',POD_ASSET_HOSTS:'assets.example.test',
     QIKINK_PRODUCTS_JSON:JSON.stringify([{variantId:'101',sku:'SYNTHETIC-MUG',printTypeId:5,placements:[placement]},
       {variantId:'102',sku:'SYNTHETIC-TEE-BLACK-M',printTypeId:1,placements:[apparel,{...apparel,key:'back',placementSku:'bk',providerPlacement:'Back',widthInches:10,heightInches:12,pixelWidth:3000,pixelHeight:3600,artworkProperty:'Back artwork',previewProperty:'Back preview'}]}])};

@@ -77,7 +77,9 @@
         "fulfillment_intent",
         "fulfillment_reconcile",
         "fulfilled",
-        "hold"
+        "hold",
+        "paused",
+        "validating"
       ],
       "default": "ignored",
       "required": true,
@@ -129,6 +131,39 @@
     },
     "reason": {
       "type": "string",
+      "private": true
+    },
+    "orderNumber": {
+      "type": "string",
+      "private": true
+    },
+    "paymentMode": {
+      "type": "string",
+      "private": true
+    },
+    "totalPaise": {
+      "type": "biginteger",
+      "private": true
+    },
+    "codCollectiblePaise": {
+      "type": "biginteger",
+      "private": true
+    },
+    "adminNotes": {
+      "type": "text",
+      "private": true
+    },
+    "corrections": {
+      "type": "json",
+      "private": true
+    },
+    "correctionSourceDigest": {
+      "type": "string",
+      "private": true
+    },
+    "adminRevision": {
+      "type": "integer",
+      "default": 0,
       "private": true
     }
   }
