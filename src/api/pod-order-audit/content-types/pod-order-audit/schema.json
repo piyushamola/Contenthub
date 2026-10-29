@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pod_order_audits",
+  "info": {
+    "singularName": "pod-order-audit",
+    "pluralName": "pod-order-audits",
+    "displayName": "Private POD audit"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    },
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "podOrderId": {
+      "type": "integer",
+      "private": true
+    },
+    "actorId": {
+      "type": "string",
+      "private": true
+    },
+    "action": {
+      "type": "string",
+      "private": true
+    },
+    "reason": {
+      "type": "string",
+      "private": true
+    },
+    "changes": {
+      "type": "json",
+      "private": true
+    }
+  }
+}

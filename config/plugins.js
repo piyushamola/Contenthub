@@ -1,4 +1,5 @@
 module.exports = ({ env }) => ({
+  "pod-orders": { enabled: true, resolve: "./src/plugins/pod-orders" },
   upload: { config: { breakpoints: {} } }, // disable small/medium/large
 
   "webp-converter": {

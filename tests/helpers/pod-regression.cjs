@@ -115,6 +115,7 @@ module.exports = async (app, base, jwt, broad) => {
     assert.equal((await get(quickKey)).sourceDigest,paidUpdate.sourceDigest);
     await request({op:'capture',shop:body.shop,orderId:'8008',stop:true});
     console.log('PASS: no public CRUD or customer data in error responses. Generic POD database suite complete.');
+    await require('./pod-admin-regression.cjs')(app,base,jwt,broad);
   } finally {
     if (before === undefined) delete process.env.POD_RELAY_SECRET; else process.env.POD_RELAY_SECRET = before;
   }

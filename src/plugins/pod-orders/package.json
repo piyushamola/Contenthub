@@ -1,0 +1,14 @@
+{
+  "name": "contenthub-pod-orders",
+  "version": "1.0.0",
+  "private": true,
+  "strapi": {
+    "name": "pod-orders",
+    "displayName": "POD orders",
+    "kind": "plugin"
+  },
+  "exports": {
+    "./strapi-admin": "./admin/index.jsx",
+    "./strapi-server": "./server.js"
+  }
+}

@@ -1,5 +1,17 @@
 # Regression checks
 
+## COD and POD admin
+
+See [the COD/admin handoff](shopify-cod-admin-handoff.md) and
+[the October 29 execution report](test-runs/2026-10-29-cod-admin.md).
+`tests/helpers/pod-admin-regression.cjs` runs through the existing POD integration
+suite, `npm run test:pod`, `npm run test:pod:postgres` and `npm run check`. It tests
+real admin sessions/RBAC, notes and audit rollback, filtering/pagination,
+pause/intent races, validation states, locked/stale edits, raw Content Manager
+bypass denial and historical records. Cross-app/browser coverage lives in
+`../birthday-celebration/tests/stack/pod-cod-admin.spec.ts`. Synthetic data only;
+provider submission stays disabled in real HTTP/browser tests.
+
 ## Generic Shopify–Qikink connector
 
 See [the Shopify handoff](shopify-production-handoff.md) and [generic execution report](test-runs/2026-10-27-generic-pod.md). Unit, private HTTP/database and real cross-app checks cover generic product mappings, multiple placements, capture, leases, cancellation and uncertain-result reconciliation. `npm run test:pod` and `npm run test:pod:postgres` in Contenthub run focused isolated database checks. No live provider writes belong in these gates.
