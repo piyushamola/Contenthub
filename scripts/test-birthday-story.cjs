@@ -1,5 +1,5 @@
 'use strict';
-// Run only with an isolated SQLite database; never load the project's .env.
+// Run only with the runner's isolated database; never load the project's .env.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -8,21 +8,27 @@ const { createStrapi } = require('@strapi/strapi');
 const {
   normalizeStory,
 } = require('../src/api/happy-birthday/utils/birthday-story');
+const disposablePostgres = process.env.DATABASE_CLIENT === 'postgres' &&
+  process.env.REGRESSION_DISPOSABLE_POSTGRES === 'true' &&
+  process.env.DATABASE_HOST === '127.0.0.1' &&
+  process.env.DATABASE_USERNAME === 'regression';
 if (
   process.env.ENV_PATH !== '/dev/null' ||
-  process.env.DATABASE_CLIENT !== 'sqlite' ||
+  (process.env.DATABASE_CLIENT !== 'sqlite' && !disposablePostgres) ||
   !process.env.DATABASE_FILENAME?.startsWith('/tmp/')
 )
   throw new Error(
-    'Use ENV_PATH=/dev/null and an isolated /tmp SQLite database',
+    'Use the regression runner with an isolated /tmp SQLite or disposable loopback PostgreSQL database',
   );
 const databasePath = process.env.DATABASE_FILENAME;
 let testPublicDir;
 // The app's SQLite config joins filenames to the project root, including absolute paths.
-process.env.DATABASE_FILENAME = require('node:path').relative(
-  process.cwd(),
-  process.env.DATABASE_FILENAME,
-);
+if (!disposablePostgres) {
+  process.env.DATABASE_FILENAME = require('node:path').relative(
+    process.cwd(),
+    process.env.DATABASE_FILENAME,
+  );
+}
 const UID = 'api::happy-birthday.happy-birthday';
 let app;
 (async () => {
@@ -336,6 +342,19 @@ let app;
     'You mean so much to me.',
   );
   assert.equal(published.storyPublishedContent.theme, 'pastel', 'Style edits stay private until explicitly published');
+  await app.db.query(UID).updateMany({
+    where: { documentId: draft.documentId },
+    data: { triggerAt: new Date(Date.now() + 3_600_000).toISOString() },
+  });
+  const earlyWish = await service.addWish(content.slug, {
+    name: 'Early visitor', message: 'A birthday wish before the celebration opens!',
+  });
+  assert.deepEqual(Object.keys(earlyWish), ['wish']);
+  const scheduledCopies = await app.db.query(UID).findMany({ where: { documentId: draft.documentId } });
+  assert.ok(scheduledCopies.every((row) => row.guestwishes.some((wish) => wish.id === earlyWish.wish.id)));
+  assert.equal(scheduledCopies.find((row) => row.publishedAt).storyPublishedContent.letter, 'You mean so much to me.');
+  assert.equal(scheduledCopies.find((row) => !row.publishedAt).storyContent.letter, content.letter);
+  await app.db.query(UID).updateMany({ where: { documentId: draft.documentId }, data: { triggerAt: null } });
   await service.addWish(content.slug, {
     name: 'Guest',
     message: 'Have a wonderful birthday!',
@@ -343,7 +362,8 @@ let app;
   published = await app.db.query(UID).findOne({
     where: { documentId: draft.documentId, publishedAt: { $notNull: true } },
   });
-  assert.equal(published.guestwishes.length, 1);
+  assert.equal(published.guestwishes.length, 2);
+  assert.ok(published.guestwishes.some((wish) => wish.id === earlyWish.wish.id));
   assert.equal(
     published.storyPublishedContent.letter,
     'You mean so much to me.',
@@ -355,7 +375,7 @@ let app;
   assert.equal(published.storyPublishedContent.letter, content.letter);
   assert.equal(published.storyPublishedContent.theme, 'pastel', 'Publishing a legacy style uses the single Pastel theme');
   assert.equal(published.expiresAt, originalExpiry);
-  assert.equal(published.guestwishes.length, 1);
+  assert.equal(published.guestwishes.length, 2);
   await app.db.query(UID).updateMany({
     where: { documentId: draft.documentId },
     data: { expiresAt: new Date(Date.now() - 1000).toISOString() },

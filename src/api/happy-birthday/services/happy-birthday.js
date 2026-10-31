@@ -8,6 +8,7 @@ const { createCoreService } = require('@strapi/strapi').factories;
 
 const HAPPY_BIRTHDAY_UID = 'api::happy-birthday.happy-birthday';
 const { CELEBRATION_DURATION_MS, celebrationWindowEndMs } = require('../utils/celebration-expiry');
+const { celebrationRetentionDate } = require('../../../privacy/celebration-erasure');
 const CLEANUP_CONCURRENCY = 5;
 const DEFAULT_NON_EXPIRING_ROUTES = 'elena,matt,mike';
 const nonExpiringRoutes = (
@@ -44,13 +45,14 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
   async unpublishCelebration(documentId) {
     const published = await strapi.db.query(HAPPY_BIRTHDAY_UID).findOne({
       where: { documentId, publishedAt: { $notNull: true } },
-      select: ['documentId', 'customroute'],
+      select: ['documentId', 'customroute', 'journeyType', 'storyFirstPublishedAt', 'createdAt', 'expiresAt', 'triggerAt'],
     });
     if (!published) return null;
 
     await strapi.db.query(HAPPY_BIRTHDAY_UID).updateMany({ where: { documentId, journeyType: 'story' }, data: { storyExpiredAt: new Date().toISOString() } });
     const result = await strapi.documents(HAPPY_BIRTHDAY_UID).unpublish({ documentId });
     if (Array.isArray(result?.entries) && result.entries.length === 0) return null;
+    await strapi.db.query(HAPPY_BIRTHDAY_UID).updateMany({ where: { documentId }, data: { retentionExpiresAt: celebrationRetentionDate(published) } });
     return { documentId, customroute: published.customroute };
   },
 

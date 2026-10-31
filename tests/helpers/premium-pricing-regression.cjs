@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const PRICING_UID = 'api::premium-pricing.premium-pricing';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
 const ORIGINAL_FIELDS = ['indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd'];
+const CURRENT_FIELDS = ['indiaPriceRupees', 'otherCountriesPriceUsd', 'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd'];
 
 // Called by the existing real Strapi/HTTP gate with its isolated database.
 module.exports = async function checkOriginalPricing(app, user, celebration, request, token) {
@@ -79,8 +80,19 @@ module.exports = async function checkOriginalPricing(app, user, celebration, req
     } });
     await expectPricing([null, null], [null, null]);
 
-    // Decimal columns can hold extra precision; display metadata is ignored
-    // rather than blocking a valid current checkout price.
+    // Reject current-price fractions before a database can round them into
+    // a different charge. A rejected write must leave saved prices untouched.
+    for (const field of CURRENT_FIELDS) {
+      const before = await app.db.query(PRICING_UID).findOne({ where: { documentId: pricing.documentId } });
+      await assert.rejects(() => app.documents(PRICING_UID).update({
+        documentId: pricing.documentId, data: { [field]: Number(before[field]) + 0.001 },
+      }), /two decimal places/i);
+      const after = await app.db.query(PRICING_UID).findOne({ where: { documentId: pricing.documentId } });
+      assert.equal(after[field], before[field]);
+    }
+
+    // Invalid display metadata is ignored rather than blocking a valid current
+    // checkout price. This must happen before PostgreSQL rounds decimal inputs.
     await app.documents(PRICING_UID).update({ documentId: pricing.documentId, data: {
       indiaOriginalPriceRupees: 18.001, otherCountriesOriginalPriceUsd: 2.501,
       storyIndiaOriginalPriceRupees: 72.001, storyOtherCountriesOriginalPriceUsd: 10.001,

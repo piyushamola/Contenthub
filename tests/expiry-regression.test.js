@@ -82,3 +82,28 @@ test('expiry cleanup rechecks active records, deduplicates drafts and keeps proc
   assert.equal(result.skippedActive, 1);
   assert.equal(result.failed, 1);
 });
+
+
+test('public removal persists the original one-year deadline and keeps media without restarting on removal', async () => {
+  const data = {
+    documentId: 'owned', customroute: 'owned', journeyType: 'standard',
+    createdAt: '2026-08-01T12:00:00.000Z', expiresAt: '2026-08-02T12:00:00.000Z',
+    triggerAt: '2026-08-10T12:00:00.000Z', retentionExpiresAt: '2026-09-01T12:00:00.000Z',
+  };
+  let published = true;
+  const service = celebrationFactory({ strapi: {
+    contentType: uid => ({ uid }),
+    db: { query: () => ({
+      findOne: async () => published ? data : null,
+      updateMany: async ({ where, data: patch }) => {
+        if (where.journeyType) return { count: 0 };
+        Object.assign(data, patch); return { count: 1 };
+      },
+    }) },
+    documents: () => ({ unpublish: async () => { published = false; return { entries: [data] }; } }),
+  } });
+  assert.deepEqual(await service.unpublishCelebration('owned'), { documentId: 'owned', customroute: 'owned' });
+  assert.equal(data.retentionExpiresAt, '2027-08-11T12:00:00.000Z');
+  assert.equal(await service.unpublishCelebration('owned'), null);
+  assert.equal(data.retentionExpiresAt, '2027-08-11T12:00:00.000Z');
+});

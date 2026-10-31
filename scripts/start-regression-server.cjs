@@ -179,11 +179,15 @@ async function main() {
     };
   }
   const controlToken = crypto.randomBytes(32).toString('hex');
+  let pricingUnavailable = false;
   function signedWebhook(event) {
     const rawBody = JSON.stringify(event);
     return { rawBody, signature: crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex') };
   }
   app.server.use(async (ctx, next) => {
+    if (mode === 'mock' && pricingUnavailable && ctx.method === 'GET' && ctx.path === '/api/celebration-payments/pricing') {
+      ctx.status = 503; ctx.body = { error: 'Synthetic pricing service outage' }; return;
+    }
     if (!ctx.path.startsWith('/__regression/')) return next();
     if (ctx.get('authorization') !== `Bearer ${controlToken}`) {
       ctx.status = 401; ctx.body = { error: 'Regression control token required' }; return;
@@ -218,6 +222,13 @@ async function main() {
       ctx.body = { data: Object.fromEntries(fields.map(field => [field, pricing[field] ?? null])) };
       return;
     }
+    if (route === '/pricing/availability' && ctx.method === 'POST') {
+      if (mode !== 'mock') { ctx.status = 409; ctx.body = { error: 'Mock pricing only' }; return; }
+      if (typeof body.available !== 'boolean') { ctx.status = 400; ctx.body = { error: 'Choose a boolean availability' }; return; }
+      pricingUnavailable = !body.available;
+      ctx.body = { available: !pricingUnavailable };
+      return;
+    }
     if (ctx.method === 'GET' && route === '/outbox') {
       ctx.body = { messages: outbox.filter((mail) => !ctx.query.email || JSON.stringify(mail.to).includes(ctx.query.email)) };
       return;
@@ -228,11 +239,37 @@ async function main() {
       }) };
       return;
     }
-    const celebrationMatch = route.match(/^\/celebrations\/([^/]+)(\/expire)?$/);
+    const podMatch = route.match(/^\/pod-orders\/([a-f0-9]{64})$/);
+    if (ctx.method === 'GET' && podMatch) {
+      const rows = await app.db.query('api::pod-order.pod-order').findMany({
+        where: { orderKey: podMatch[1] }, select: ['id'], orderBy: { id: 'asc' },
+      });
+      ctx.body = { recordCount: rows.length, ids: rows.map(row => row.id) };
+      return;
+    }
+    const celebrationMatch = route.match(/^\/celebrations\/([^/]+)(\/(?:expire|schedule))?$/);
     if (celebrationMatch) {
       const slug = decodeURIComponent(celebrationMatch[1]);
-      if (ctx.method === 'POST' && celebrationMatch[2]) {
-        await app.db.query(UID).updateMany({ where: { customroute: slug }, data: { expiresAt: new Date(Date.now() - 60_000).toISOString() } });
+      if (ctx.method === 'POST' && celebrationMatch[2] === '/schedule') {
+        const triggerMs = typeof body.triggerAt === 'string' ? Date.parse(body.triggerAt) : NaN;
+        if (!Number.isFinite(triggerMs)) {
+          ctx.status = 400; ctx.body = { error: 'A valid triggerAt is required' }; return;
+        }
+        const triggerAt = new Date(triggerMs).toISOString();
+        const expiresAt = new Date(triggerMs + 86_400_000).toISOString();
+        const result = await app.db.query(UID).updateMany({
+          where: { customroute: slug }, data: { triggerAt, expiresAt },
+        });
+        if (!result.count) { ctx.status = 404; ctx.body = { error: 'Celebration not found' }; return; }
+        ctx.body = { triggerAt, expiresAt };
+        return;
+      }
+      if (ctx.method === 'POST' && celebrationMatch[2] === '/expire') {
+        const expiryMs = Date.now() - 60_000;
+        await app.db.query(UID).updateMany({ where: { customroute: slug, triggerAt: { $notNull: true } }, data: {
+          triggerAt: new Date(expiryMs - 86_400_000).toISOString(),
+        } });
+        await app.db.query(UID).updateMany({ where: { customroute: slug }, data: { expiresAt: new Date(expiryMs).toISOString() } });
         ctx.body = { expired: true, cleanup: await app.service(UID).unpublishExpired() };
         return;
       }

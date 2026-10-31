@@ -26,11 +26,39 @@ module.exports = async (app, base, jwt, broad) => {
     const orderKey = (await request(body)).body.orderKey;
     const get = async key => (await request({op:'get',orderKey:key || orderKey})).body.order;
     const first = await get();
+    const copy={documentId:'synthetic-unique-guard',orderKey,reference:'synthetic-distinct-reference',
+      shop:body.shop,shopifyOrderId:body.orderId,state:'ignored'};
+    await assert.rejects(()=>app.db.query('api::pod-order.pod-order').create({data:copy}),
+      /unique|duplicate|already exists/i,'The database must reject another row for the same Shopify order');
+    await assert.rejects(()=>app.db.query('api::pod-order.pod-order').create({data:{...copy,
+      orderKey:'f'.repeat(64),reference:first.reference}}),
+      /unique|duplicate|already exists/i,'The database must reject a reused provider reference');
     await Promise.all(Array.from({length:6},()=>request(body).then(result=>assert.equal(result.status,200))));
     assert.equal((await get()).id,first.id);
+    assert.equal(await app.db.query('api::pod-order.pod-order').count({where:{orderKey}}),1,
+      'Concurrent capture must persist exactly one order row');
     const claims = await Promise.all([request({op:'claim'}),request({op:'claim'})]);
-    assert.equal(claims.filter(result=>result.body.order).length,1);
-    const claimed = claims.find(result=>result.body.order).body.order;
+    assert.equal(claims.filter(result=>result.body.order).length,1,
+      JSON.stringify(claims.map(result=>({status:result.status,id:result.body.order?.id,
+        orderKey:result.body.order?.orderKey,leaseUntil:result.body.order?.leaseUntil}))));
+    let claimed = claims.find(result=>result.body.order).body.order;
+    assert.equal(claimed.id,first.id);
+    // Reopen only this synthetic lease between waves. Each worker must race
+    // through the real HTTP route and transaction, not a mocked lock.
+    for (let wave=0;wave<20;wave++) {
+      await app.db.query('api::pod-order.pod-order').update({where:{id:first.id},data:{
+        leaseUntil:new Date(Date.now()-1000).toISOString(),
+      }});
+      const contenders=await Promise.all(Array.from({length:6},()=>request({op:'claim'})));
+      contenders.forEach(result=>assert.equal(result.status,200));
+      const winners=contenders.flatMap(result=>result.body.order?[result.body.order]:[]);
+      assert.equal(winners.length,1,`Lease wave ${wave}: `+JSON.stringify(winners.map(order=>({id:order.id,orderKey:order.orderKey}))));
+      assert.equal(winners[0].id,first.id);
+      claimed=winners[0];
+      assert.equal((await get()).leaseToken,claimed.leaseToken,'The winning lease must be persisted');
+      assert.equal((await request({op:'claim'})).body.order,null,
+        'A later worker must not reclaim an unexpired lease');
+    }
     const lease = {orderKey,leaseToken:claimed.leaseToken};
     const intent = {...lease,op:'intent',sourceDigest:body.sourceDigest,requestDigest:'a'.repeat(64)};
     assert.equal((await request(intent)).status,200);

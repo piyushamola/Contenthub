@@ -91,6 +91,20 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
     data: { username: 'http-other', email: 'http-other@example.invalid', provider: 'local', confirmed: true, role: role.id },
   });
   const otherToken = app.plugin('users-permissions').service('jwt').issue({ id: other.id });
+  const originalCelebrationRows = await app.db.query('api::happy-birthday.happy-birthday').findMany({
+    where: { documentId: celebration.documentId }, orderBy: { id: 'asc' },
+  });
+  for (const sessionToken of [undefined, token, otherToken]) {
+    const removedErasure = await fetch(`${base}/happy-birthdays/${celebration.documentId}/erase`, {
+      method: 'DELETE', headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+      signal: AbortSignal.timeout(10_000),
+    });
+    // Strapi's fallback can return a plain-text 405 for an unmatched mutation.
+    assert.ok([404, 405].includes(removedErasure.status), 'Celebrations have no self-service erasure endpoint');
+  }
+  assert.deepEqual(await app.db.query('api::happy-birthday.happy-birthday').findMany({
+    where: { documentId: celebration.documentId }, orderBy: { id: 'asc' },
+  }), originalCelebrationRows, 'Unavailable erasure requests must leave every version intact');
   const othersDashboard = await request('/happy-birthdays/mine', { token: otherToken });
   assert.equal(othersDashboard.status, 200);
   assert.deepEqual(othersDashboard.body.data, []);
@@ -116,6 +130,7 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500, originalINR: null, originalUSD: null });
   await require('./premium-pricing-regression.cjs')(app, user, celebration, request, serverToken.accessKey);
   await require('./story-from-standard-regression.cjs')(app, user, request, serverToken.accessKey, token, other.id);
+  await require('./celebration-wishes-regression.cjs')(app, user, request, serverToken.accessKey, token);
   const standardData = {
     personname: 'HTTP Standard', personemail: 'http-standard@example.invalid',
     hostname: 'Regression Creator', hostemail: user.email, owner: user.id,
@@ -206,5 +221,6 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   assert.equal((await request('/birthday-stories', {
     token, method: 'POST', body: { ownerId: user.id },
   })).status, 403, 'A browser JWT cannot call internal story endpoints');
+  await require('./privacy-regression.cjs')(app, base, token, otherToken, serverToken.accessKey, user);
   console.log('PASS: real HTTP login, users/me, dashboard ownership, pause/resume, API-token pricing and access contracts.');
 };

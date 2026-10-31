@@ -9,7 +9,6 @@ const {
 } = require('../utils/birthday-story');
 const { celebrationExpiresAt, celebrationWindowEndMs } = require('../utils/celebration-expiry');
 const {
-  isBeforeTrigger,
   presentSchedule,
   storyTriggerExpiry,
   storyTriggerPatch,
@@ -68,7 +67,7 @@ module.exports = ({ strapi }) => ({
   },
   async owned(documentId, ownerId) {
     const entry = await this.draft(documentId);
-    if (!entry || !Number.isInteger(ownerId) || entry.owner?.id !== ownerId)
+    if (!entry || entry.erasureRequestedAt || !Number.isInteger(ownerId) || entry.owner?.id !== ownerId)
       throw new Error('Story not found');
     return entry;
   },
@@ -85,50 +84,8 @@ module.exports = ({ strapi }) => ({
       });
   },
   async addWish(slug, input) {
-    const name = String(input?.name || '').trim();
-    const message = String(input?.message || '').trim();
-    if (!name || name.length > 100 || !message || message.length > 2000)
-      throw new Error(
-        'Add your name (up to 100 characters) and wish (up to 2000 characters)',
-      );
-    return strapi.db.transaction(async () => {
-      const where = {
-        customroute: slug,
-        journeyType: 'story',
-        publishedAt: { $notNull: true },
-      };
-      const entry = await strapi.db.query(UID).findOne({ where });
-      if (
-        !entry ||
-        storyExpired(entry) ||
-        isBeforeTrigger(entry.triggerAt) ||
-        !entry.premiumUnlocked ||
-        entry.celebrationStatus === 'paused'
-      )
-        throw new Error('Story not available');
-      // Serialize appends without publishing any of the creator's pending edits.
-      await strapi.db
-        .query(UID)
-        .updateMany({
-          where: { id: entry.id },
-          data: { updatedAt: new Date() },
-        });
-      const current = await strapi.db
-        .query(UID)
-        .findOne({ where: { id: entry.id } });
-      const wish = { name, message, id: require('crypto').randomUUID() };
-      const wishes = [
-        ...(Array.isArray(current.guestwishes) ? current.guestwishes : []),
-        wish,
-      ];
-      await strapi.db
-        .query(UID)
-        .updateMany({
-          where: { documentId: entry.documentId },
-          data: { guestwishes: wishes },
-        });
-      return { wish, wishes };
-    });
+    return strapi.service('api::happy-birthday.celebration-wish')
+      .addWish(slug, input, { storyOnly: true });
   },
   async read(documentId, ownerId, isAdmin = false) {
     const entry = isAdmin
@@ -391,7 +348,7 @@ module.exports = ({ strapi }) => ({
       });
       if (!purchase) throw new Error('Story payment record is unavailable');
       const entry = await this.draft(purchase.celebrationDocumentId);
-      if (!entry || storyExpired(entry))
+      if (!entry || entry.erasureRequestedAt || storyExpired(entry))
         return {
           unlocked: false,
           expired: true,
@@ -424,6 +381,7 @@ module.exports = ({ strapi }) => ({
         where: { id: entry.id, storyFirstPublishedAt: null },
         data: {
           storyFirstPublishedAt: firstPublishedAt,
+          retentionExpiresAt: null,
           expiresAt,
           premiumUnlocked: true,
           premiumPaymentId: payment.id,

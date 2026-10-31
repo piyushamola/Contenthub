@@ -78,6 +78,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       where: {
         customroute: { $eqi: normalizedSlug },
         publishedAt: { $notNull: true },
+        erasureRequestedAt: null,
       },
       select: [
         'documentId',
@@ -96,7 +97,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     });
     if (published) return { ...published, storyIsPublished: true };
     const draft = await strapi.service('api::happy-birthday.birthday-story').findBySlug(normalizedSlug);
-    return draft ? { ...draft, storyIsPublished: false } : null;
+    return draft && !draft.erasureRequestedAt ? { ...draft, storyIsPublished: false } : null;
   },
 
   accessFor(celebration, prices, fallbackCountry) {
@@ -275,11 +276,12 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       select: [
         'createdAt',
         'expiresAt',
+        'erasureRequestedAt',
         'premiumUnlocked',
         'premiumPaymentId',
       ],
     });
-    if (!celebrationBeforeGrant) {
+    if (!celebrationBeforeGrant || celebrationBeforeGrant.erasureRequestedAt) {
       await strapi.db.query(PURCHASE_UID).update({
         where: { purchaseId: purchase.purchaseId },
         data: {

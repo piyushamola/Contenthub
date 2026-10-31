@@ -82,6 +82,23 @@ async function main() {
       customroute: slug, birthdaymessages: ['One', 'Two', 'Three'], templateId: 'classic', musicId: 'none', country: 'IN', owner: ready.users.creator.id,
     } } });
     assert.equal(creation.status, 201);
+    const scheduleRoute = `/__regression/celebrations/${slug}/schedule`;
+    const triggerAt = new Date(Date.now() + 3_600_000).toISOString();
+    assert.equal((await request(scheduleRoute, { method: 'POST', data: { triggerAt } })).status, 401);
+    assert.equal((await request(scheduleRoute, { method: 'POST', token, data: { triggerAt } })).status, 401);
+    assert.equal((await request(scheduleRoute, { method: 'POST', control: true, data: { triggerAt: 'not-a-date' } })).status, 400);
+    assert.equal((await request('/__regression/celebrations/missing/schedule', { method: 'POST', control: true, data: { triggerAt } })).status, 404);
+    const scheduled = await request(scheduleRoute, { method: 'POST', control: true, data: { triggerAt } });
+    assert.equal(scheduled.status, 200);
+    assert.equal(scheduled.data.triggerAt, triggerAt);
+    assert.equal(Date.parse(scheduled.data.expiresAt) - Date.parse(triggerAt), 86_400_000);
+    const earlyWish = await request(`/api/celebration-wishes/${slug}`, { method: 'POST', token, data: { name: 'Smoke visitor', message: 'An early birthday wish' } });
+    assert.equal(earlyWish.status, 200);
+    assert.deepEqual(Object.keys(earlyWish.data), ['wish']);
+    const openTrigger = new Date(Date.now() - 60_000).toISOString();
+    assert.equal((await request(scheduleRoute, { method: 'POST', control: true, data: { triggerAt: openTrigger } })).status, 200);
+    const openedState = await request(`/__regression/celebrations/${slug}`, { control: true });
+    assert.ok(openedState.data.rows.every((row) => row.triggerAt === openTrigger && row.guestwishes.some((wish) => wish.id === earlyWish.data.wish.id)));
     const purchaseId = crypto.randomUUID();
     const order = await request('/api/celebration-payments/orders', { method: 'POST', token, data: {
       slug, purchaseId, country: 'IN', ownerId: ready.users.creator.id,

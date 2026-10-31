@@ -9,6 +9,18 @@
   "options": {
     "draftAndPublish": false
   },
+  "indexes": [
+    {
+      "name": "pod_orders_order_key_unique",
+      "columns": ["order_key"],
+      "type": "unique"
+    },
+    {
+      "name": "pod_orders_reference_unique",
+      "columns": ["reference"],
+      "type": "unique"
+    }
+  ],
   "pluginOptions": {
     "content-manager": {
       "visible": false

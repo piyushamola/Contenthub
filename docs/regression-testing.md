@@ -1,5 +1,68 @@
 # Regression checks
 
+## October 31 stash recovery and celebration erasure removal
+
+Restored the October 31 stash containing one-year retention, scheduled cleanup,
+early guest wishes, price validation and POD uniqueness changes. The original
+stash remains available and current generated types were preserved. The custom
+celebration erasure route/controller and its permission grants were removed to
+honor the owner's later request. Scheduled cleanup and its media retry guards
+remain. HTTP cases expect the retired endpoint to be unavailable (404 or the
+Strapi fallback's 405), with documents/media retained. Next.js cases expect 404.
+No tests, builds, typechecks, browser or stack checks were run for this recovery.
+See `../birthday-celebration/docs/2026-10-31-remove-celebration-erasure.md`.
+
+The [October 30–31 full regression report](../../birthday-celebration/docs/test-runs/2026-10-30-full-regression.md)
+records the completed explicit test request: 168 backend units, real SQLite
+and PostgreSQL integration, disposable-server checks and the admin production
+build passed. The frontend's complete browser run, post-fix pricing/API follow-up,
+75 real-stack cases and 206 iPhone/WebKit cases also passed. The report preserves
+the failures and fixes rather than treating earlier diagnostic passes as proof.
+
+`npm run test:integration:postgres` now runs the same real lifecycle/HTTP
+integration suite as `test:integration` against a disposable PostgreSQL cluster.
+It uses the existing `initdb`/`pg_ctl` isolation, a newly allocated loopback port,
+dummy credentials and a temporary data directory; it never inherits database
+URLs or connects to an existing database. Set `REGRESSION_PG_BIN` when the tools
+are not at the runner's detected PostgreSQL 16 location. The cluster is stopped
+and removed on completion. The normal `npm run check` remains SQLite-based;
+this additional command checks database-specific behavior, including concurrent
+guest-wish appends, with the same assertions. Runner isolation is covered by
+`tests/check-runner.test.js` in the normal unit gate. October 30–31 execution
+results are recorded in the frontend's dated full-regression report.
+
+The October 30–31 full regression also adds real price-write checks before
+PostgreSQL decimal rounding, backed by `tests/premium-pricing-input.test.js`.
+Current prices reject fractions of a cent/paise; over-precise optional original
+prices are cleared before persistence. Both database integration suites retain
+the HTTP quote and ownership assertions. The POD helper now checks one persisted
+capture row and runs 20 six-worker HTTP lease races on disposable data. The
+focused PostgreSQL run and final SQLite gate passed these expanded checks;
+the dated report preserves the earlier failures and their diagnosis. A later
+row-count check reproduced duplicate captures and confirmed that the attribute
+`unique` flags had not created database constraints. Explicit schema indexes now
+enforce uniqueness for the order key and provider reference. Regression coverage
+also rejects direct duplicate writes, checks the saved winning token and denies
+sequential claims before its lease expires.
+
+Before deploying these indexes to an existing database, run these read-only
+preflight queries:
+
+```sql
+SELECT order_key, COUNT(*) FROM pod_orders
+WHERE order_key IS NOT NULL GROUP BY order_key HAVING COUNT(*) > 1;
+
+SELECT reference, COUNT(*) FROM pod_orders
+WHERE reference IS NOT NULL GROUP BY reference HAVING COUNT(*) > 1;
+```
+
+Resolve any returned groups by reviewing their submission/provider history
+before deployment. The schema sync adds the unique indexes on startup and will
+reject conflicting existing rows. This change does not delete, merge or rewrite
+orders automatically. Fresh disposable SQLite/PostgreSQL tests cover the new
+constraints; production data and an existing-database upgrade are separate
+deployment checks.
+
 ## COD and POD admin
 
 See [the COD/admin handoff](shopify-cod-admin-handoff.md) and
@@ -137,6 +200,7 @@ All controls require `Authorization: Bearer <ready.control.token>`. Paths below 
 | `GET /pricing`, `PATCH /pricing` | Mock mode only: read or edit the eight supported current/original price fields in the isolated real singleton; returns `{data}` so tests can restore previous values |
 | `GET /celebrations/:slug` | Real draft/published rows, related purchases, and retained image/story media; owner fields exclude password hashes |
 | `POST /celebrations/:slug/expire` | Set expiry in the past and run the real unpublish cleanup |
+| `POST /celebrations/:slug/schedule` | Disposable test server only: set `triggerAt` and its 24-hour expiry on both copies to exercise countdown-to-live transitions without waiting |
 | `GET /outbox?email=...` | Captured email content, including real registration/reset links |
 | `GET /users?email=...` | User IDs, email, confirmation state, and role |
 | `POST /payments/:orderId/capture` | Mock mode only: capture at the provider boundary and return a signed payment callback and webhook; the real verification/webhook route must still grant access |
@@ -197,3 +261,53 @@ lists the remaining helper/browser coverage and NAV-03/PRICE-01–14 cases.
 request.** Existing run results apply to their recorded snapshots. See
 [pricing setup](pricing.md) for backend-first deployment, Save without Publish,
 optional-original fallback and the shared revalidation workflow.
+
+
+## October 30 EU readiness
+
+See the frontend `docs/2026-10-30-eu-readiness-implementation.md` for the cross-repository contract, coverage, deployment order and unresolved provider/business evidence. Retention and consent coverage is wired into the existing gates; later removals deleted custom intake, early-delivery requirements and self-service celebration erasure. No test, build, typecheck, lint or browser verification commands were run for this implementation request.
+
+
+## October 30 one-year retention follow-up
+
+The owner changed private celebration retention to one calendar year after the original public-window end; never-published checkout drafts use original creation. Reminder emails are deferred. Calendar/boundary/migration/retry unit coverage, persisted backend/HTTP coverage, frontend fixtures/dashboard and real-stack assertions were updated. See `../birthday-celebration/docs/2026-10-30-one-year-celebration-retention.md` and DASH-06/07, LIFE-03/07–11. No tests or verification commands were executed for this source change; execution was not requested.
+
+
+## October 30 removal of policy, request and early-delivery additions
+
+At the owner's explicit request, removed seller/EU policy additions and Shopify policy artifacts, custom request pages/APIs/Strapi collection/receipts, and early-delivery acknowledgment/contract confirmation. Existing main-site policies retain the separately requested one-year retention and cookie-choice wording. Scheduled cleanup and optional tracking controls remain; self-service celebration erasure was removed in the October 31 follow-up.
+
+Original checkout payloads and existing regression callers are restored. Added/updated coverage describes no-checkbox checkout, new-order persistence/idempotency without acknowledgment fields, unavailable request APIs, absent footer links, and preserved ownership/cleanup guards (EU-06–08, PAY-03/07/15, DASH-06/07, LIFE-03/07–11). Tests for removed behavior were updated intentionally. Existing gates discover the remaining cases.
+
+No tests, typechecks, lint, builds, browser/stack or media checks were run. Execution was not requested. No deployment, production database/schema changes, emails or payment calls were performed. Remaining runtime checks require a separate testing request.
+
+## October 30 countdown guest wishes
+
+`POST /api/celebration-wishes/:slug` uses the existing internal API-token policy
+and payment-server permission scope. It saves wishes on published Standard and
+paid published Story celebrations, both before and after opening. Names must be
+trimmed strings of 1–100 characters; messages must be 4–2000 characters. Missing,
+unpublished, paused, expired, unpaid Story and erasure-pending entries return
+404; the Elena Story demo returns 403. The existing Story wish endpoint stays
+Story-only and delegates to the same append service.
+
+The append transaction locks the published row, rechecks availability and then
+updates only wishes and modification timestamps on both draft and published
+copies. This keeps creator edits private and preserves wishes when those edits
+are later published. Before opening the response includes only the newly saved
+wish. Live responses also include the wish list. This does not extend expiry or
+private retention and adds no schema field or migration.
+
+Coverage was added to `tests/celebration-wishes.test.js`, the real HTTP helper
+`tests/helpers/celebration-wishes-regression.cjs` called by the existing HTTP
+suite, and the paid Story persistence flow in `scripts/test-birthday-story.cjs`.
+The disposable launcher schedule control and its authorization/validation/wish
+persistence cases are covered in `scripts/test-regression-server.cjs`; it is
+never registered by normal Strapi startup. Existing gates discover these cases.
+Frontend API/fixture/browser/real-stack coverage accompanies this contract.
+
+No tests, builds, lint, typechecks or other verification commands were run for
+this request. PostgreSQL lock/concurrency behavior still needs a disposable
+PostgreSQL or staging check when testing is requested; SQLite and mocked
+transactions do not prove production locking. Deploy this backend route before
+the frontend countdown form and new Next.js wish proxy.

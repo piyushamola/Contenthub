@@ -149,6 +149,14 @@
     },
     "storyExpiredAt": {
       "type": "datetime"
+    },
+    "retentionExpiresAt": {
+      "type": "datetime",
+      "private": true
+    },
+    "erasureRequestedAt": {
+      "type": "datetime",
+      "private": true
     }
   }
 }

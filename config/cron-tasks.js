@@ -3,6 +3,13 @@
 const HAPPY_BIRTHDAY_UID = 'api::happy-birthday.happy-birthday';
 
 module.exports = {
+  purgeRetainedCelebrations: {
+    task: async ({ strapi }) => {
+      const result = await require('../src/privacy/celebration-erasure').purgeRetained(strapi);
+      if (result.failed) throw new Error('Privacy cleanup has pending erasures; review server logs');
+    },
+    options: { rule: '0 35 * * * *', tz: 'UTC' },
+  },
   expireCelebrations: {
     task: async ({ strapi }) => {
       const result = await strapi

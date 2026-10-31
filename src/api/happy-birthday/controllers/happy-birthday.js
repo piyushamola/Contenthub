@@ -37,11 +37,7 @@ const DASHBOARD_POPULATE = {
 
 const DEFAULT_PAGE_SIZE = 5;
 const MAX_PAGE_SIZE = 50;
-const visibleDashboardRows = { $or: [
-  { journeyType: 'story', publishedAt: null },
-  { journeyType: { $ne: 'story' }, publishedAt: { $notNull: true } },
-  { journeyType: null, publishedAt: { $notNull: true } },
-] };
+const visibleDashboardRows = { publishedAt: null };
 
 
 function parsePagination(query = {}) {
@@ -66,8 +62,12 @@ async function findDashboardPage(strapi, where, { page, pageSize }) {
     strapi.db.query(UID).count({ where }),
   ]);
 
+  const published = entries.length ? await strapi.db.query(UID).findMany({
+    where: { documentId: { $in: entries.map(entry => entry.documentId) }, publishedAt: { $notNull: true } }, select: ['documentId'],
+  }) : [];
+  const publishedDocuments = new Set(published.map(entry => entry.documentId));
   return {
-    data: entries.map(serializeForDashboard),
+    data: entries.map(entry => serializeForDashboard({ ...entry, hasPublishedVersion: publishedDocuments.has(entry.documentId) })),
     meta: {
       pagination: {
         page,
@@ -100,6 +100,9 @@ function serializeForDashboard(entry) {
     // ?status=draft|published query parameter).
     status: entry.celebrationStatus || 'active',
     expiresAt: entry.expiresAt,
+    publiclyAvailable: !entry.erasureRequestedAt && Boolean(entry.publishedAt || entry.hasPublishedVersion),
+    retentionExpiresAt: entry.retentionExpiresAt || null,
+    erasurePending: Boolean(entry.erasureRequestedAt),
     ...(entry.journeyType === 'story' ? {} : presentSchedule(entry)),
     premiumUnlocked: Boolean(entry.premiumUnlocked),
     journeyType: entry.journeyType || 'standard',
@@ -169,6 +172,8 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     }
   },
   async update(ctx) {
+    const pending = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, erasureRequestedAt: { $notNull: true } } });
+    if (pending) return ctx.conflict('Deletion is in progress');
     const data = ctx.request.body?.data || {};
     if (!isServerToken(ctx)) {
       const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });

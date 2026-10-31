@@ -611,6 +611,50 @@ export interface ApiBlogCategoryBlogCategory
   };
 }
 
+export interface ApiCelebrationEmailDeliveryCelebrationEmailDelivery
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'celebration_email_deliveries';
+  info: {
+    displayName: 'Celebration email delivery';
+    pluralName: 'celebration-email-deliveries';
+    singularName: 'celebration-email-delivery';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    celebrationDocumentId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    deliveryStatus: Schema.Attribute.Enumeration<
+      ['claimed', 'sent', 'failed', 'existing']
+    > &
+      Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::celebration-email-delivery.celebration-email-delivery'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    sentAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCelebrationPurchaseCelebrationPurchase
   extends Struct.CollectionTypeSchema {
   collectionName: 'celebration_purchases';
@@ -884,6 +928,7 @@ export interface ApiHappyBirthdayHappyBirthday
       Schema.Attribute.SetMinMaxLength<{
         minLength: 3;
       }>;
+    erasureRequestedAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
     expiresAt: Schema.Attribute.DateTime;
     guestwishes: Schema.Attribute.JSON;
     hostemail: Schema.Attribute.Email & Schema.Attribute.Required;
@@ -913,6 +958,7 @@ export interface ApiHappyBirthdayHappyBirthday
     premiumUnlocked: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
     publishedAt: Schema.Attribute.DateTime;
+    retentionExpiresAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
     storyAssetMetadata: Schema.Attribute.JSON & Schema.Attribute.Private;
     storyAssets: Schema.Attribute.Media<'images' | 'audios', true> &
       Schema.Attribute.Private;
@@ -924,6 +970,8 @@ export interface ApiHappyBirthdayHappyBirthday
       Schema.Attribute.DefaultTo<0>;
     storyRevision: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     templateId: Schema.Attribute.String & Schema.Attribute.Required;
+    timezone: Schema.Attribute.String;
+    triggerAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1106,6 +1154,146 @@ export interface ApiPaymentWebhookEventPaymentWebhookEvent
   };
 }
 
+export interface ApiPodOrderAuditPodOrderAudit
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'pod_order_audits';
+  info: {
+    displayName: 'Private POD audit';
+    pluralName: 'pod-order-audits';
+    singularName: 'pod-order-audit';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    action: Schema.Attribute.String & Schema.Attribute.Private;
+    actorId: Schema.Attribute.String & Schema.Attribute.Private;
+    changes: Schema.Attribute.JSON & Schema.Attribute.Private;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::pod-order-audit.pod-order-audit'
+    > &
+      Schema.Attribute.Private;
+    podOrderId: Schema.Attribute.Integer & Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    reason: Schema.Attribute.String & Schema.Attribute.Private;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiPodOrderPodOrder extends Struct.CollectionTypeSchema {
+  collectionName: 'pod_orders';
+  info: {
+    displayName: 'Private POD order';
+    pluralName: 'pod-orders';
+    singularName: 'pod-order';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    adminNotes: Schema.Attribute.Text & Schema.Attribute.Private;
+    adminRevision: Schema.Attribute.Integer &
+      Schema.Attribute.Private &
+      Schema.Attribute.DefaultTo<0>;
+    codCollectiblePaise: Schema.Attribute.BigInteger & Schema.Attribute.Private;
+    corrections: Schema.Attribute.JSON & Schema.Attribute.Private;
+    correctionSourceDigest: Schema.Attribute.String & Schema.Attribute.Private;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    erased: Schema.Attribute.Boolean &
+      Schema.Attribute.Private &
+      Schema.Attribute.DefaultTo<false>;
+    fulfillmentId: Schema.Attribute.String & Schema.Attribute.Private;
+    fulfillmentToken: Schema.Attribute.String & Schema.Attribute.Private;
+    intentAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
+    intentToken: Schema.Attribute.String & Schema.Attribute.Private;
+    issues: Schema.Attribute.JSON & Schema.Attribute.Private;
+    leaseToken: Schema.Attribute.String & Schema.Attribute.Private;
+    leaseUntil: Schema.Attribute.DateTime & Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::pod-order.pod-order'
+    > &
+      Schema.Attribute.Private;
+    nextRunAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
+    orderKey: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private &
+      Schema.Attribute.Unique;
+    orderNumber: Schema.Attribute.String & Schema.Attribute.Private;
+    paymentMode: Schema.Attribute.String & Schema.Attribute.Private;
+    providerId: Schema.Attribute.String & Schema.Attribute.Private;
+    providerStatus: Schema.Attribute.String & Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    reason: Schema.Attribute.String & Schema.Attribute.Private;
+    reference: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private &
+      Schema.Attribute.Unique;
+    requestDigest: Schema.Attribute.String & Schema.Attribute.Private;
+    shop: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    shopifyOrderId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    snapshot: Schema.Attribute.JSON & Schema.Attribute.Private;
+    sourceDigest: Schema.Attribute.String & Schema.Attribute.Private;
+    sourceUpdatedAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
+    state: Schema.Attribute.Enumeration<
+      [
+        'ignored',
+        'queued',
+        'intent',
+        'reconcile',
+        'submitted',
+        'fulfillment_intent',
+        'fulfillment_reconcile',
+        'fulfilled',
+        'hold',
+        'paused',
+        'validating',
+      ]
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private &
+      Schema.Attribute.DefaultTo<'ignored'>;
+    stopRequested: Schema.Attribute.Boolean &
+      Schema.Attribute.Private &
+      Schema.Attribute.DefaultTo<false>;
+    totalPaise: Schema.Attribute.BigInteger & Schema.Attribute.Private;
+    tracking: Schema.Attribute.JSON & Schema.Attribute.Private;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPremiumPricingPremiumPricing
   extends Struct.SingleTypeSchema {
   collectionName: 'premium_pricings';
@@ -1122,6 +1310,13 @@ export interface ApiPremiumPricingPremiumPricing
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    indiaOriginalPriceRupees: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     indiaPriceRupees: Schema.Attribute.Decimal &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -1137,6 +1332,13 @@ export interface ApiPremiumPricingPremiumPricing
       'api::premium-pricing.premium-pricing'
     > &
       Schema.Attribute.Private;
+    otherCountriesOriginalPriceUsd: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     otherCountriesPriceUsd: Schema.Attribute.Decimal &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -1147,6 +1349,13 @@ export interface ApiPremiumPricingPremiumPricing
       > &
       Schema.Attribute.DefaultTo<1>;
     publishedAt: Schema.Attribute.DateTime;
+    storyIndiaOriginalPriceRupees: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     storyIndiaPriceRupees: Schema.Attribute.Decimal &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -1156,6 +1365,13 @@ export interface ApiPremiumPricingPremiumPricing
         number
       > &
       Schema.Attribute.DefaultTo<36>;
+    storyOtherCountriesOriginalPriceUsd: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     storyOtherCountriesPriceUsd: Schema.Attribute.Decimal &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -1924,6 +2140,7 @@ declare module '@strapi/strapi' {
       'api::author-tp.author-tp': ApiAuthorTpAuthorTp;
       'api::blog-article.blog-article': ApiBlogArticleBlogArticle;
       'api::blog-category.blog-category': ApiBlogCategoryBlogCategory;
+      'api::celebration-email-delivery.celebration-email-delivery': ApiCelebrationEmailDeliveryCelebrationEmailDelivery;
       'api::celebration-purchase.celebration-purchase': ApiCelebrationPurchaseCelebrationPurchase;
       'api::collapsible.collapsible': ApiCollapsibleCollapsible;
       'api::gift-category.gift-category': ApiGiftCategoryGiftCategory;
@@ -1933,6 +2150,8 @@ declare module '@strapi/strapi' {
       'api::news.news': ApiNewsNews;
       'api::newsletter-subscriber.newsletter-subscriber': ApiNewsletterSubscriberNewsletterSubscriber;
       'api::payment-webhook-event.payment-webhook-event': ApiPaymentWebhookEventPaymentWebhookEvent;
+      'api::pod-order-audit.pod-order-audit': ApiPodOrderAuditPodOrderAudit;
+      'api::pod-order.pod-order': ApiPodOrderPodOrder;
       'api::premium-pricing.premium-pricing': ApiPremiumPricingPremiumPricing;
       'api::product-widget.product-widget': ApiProductWidgetProductWidget;
       'api::product.product': ApiProductProduct;

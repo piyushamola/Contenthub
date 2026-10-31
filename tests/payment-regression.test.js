@@ -23,6 +23,7 @@ function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 10
     expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
     publishedAt: new Date().toISOString(),
     premiumUnlocked: false,
+    erasureRequestedAt: null,
     ...celebration,
   };
   const purchaseRow = {
@@ -339,4 +340,43 @@ test('pending Story access uses its saved currency and amount when displaying an
     assert.equal(access.originalAmountPaise, null);
   }
   assert.deepEqual(f.providerCalls, [], 'Reading comparison metadata never contacts the provider');
+});
+
+
+test('checkout creates and reuses an owned order without an early-delivery acknowledgment', async t => {
+  const previousKey = process.env.RAZORPAY_KEY_ID;
+  const previousSecret = process.env.RAZORPAY_KEY_SECRET;
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_dummy';
+  process.env.RAZORPAY_KEY_SECRET = 'dummy-secret';
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.RAZORPAY_KEY_ID;
+    else process.env.RAZORPAY_KEY_ID = previousKey;
+    if (previousSecret === undefined) delete process.env.RAZORPAY_KEY_SECRET;
+    else process.env.RAZORPAY_KEY_SECRET = previousSecret;
+  });
+  const f = fixture();
+  f.rows[PURCHASE_UID].length = 0;
+  const providerOrders = [];
+  f.service.razorpay = async (endpoint, options) => {
+    assert.equal(endpoint, '/orders');
+    providerOrders.push(JSON.parse(options.body));
+    return { id: 'order_without_ack', status: 'created' };
+  };
+  const input = { slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42 };
+  const first = await f.service.createOrder(input);
+  const retry = await f.service.createOrder(input);
+  assert.deepEqual(retry, first);
+  assert.equal(first.amount, 900);
+  assert.equal(first.currency, 'INR');
+  assert.equal(providerOrders.length, 1);
+  assert.equal(f.rows[PURCHASE_UID].length, 1);
+  assert.equal(f.rows[PURCHASE_UID][0].status, 'created');
+  assert.equal(Object.hasOwn(f.rows[PURCHASE_UID][0], 'checkoutDisclosure'), false);
+  assert.equal(Object.hasOwn(f.rows[PURCHASE_UID][0], 'contractConfirmationState'), false);
+});
+
+test('a celebration pending scheduled cleanup cannot start checkout', async () => {
+  const f = fixture({ celebration: { erasureRequestedAt: new Date().toISOString() } });
+  await assert.rejects(f.service.createOrder({ slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42 }), /not found/);
+  assert.deepEqual(f.providerCalls, []);
 });
