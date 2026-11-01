@@ -122,6 +122,21 @@ test('interrupted scheduled cleanup retries failed media removal', async () => {
  assert.equal((await purgeRetained(f.strapi, now)).erased, 1);
  assert.deepEqual(f.removed, [10]);
 });
+
+test('an admin-requested demo erasure retries, while unrequested demos stay excluded from retention', async () => {
+ const now = Date.parse('2027-08-02T13:00:00.000Z');
+ const f = cleanupFixture([
+  { ...retained, documentId: 'requested-demo', customroute: 'elena', erasureRequestedAt: '2027-08-02T12:00:00.000Z', images: [{ id: 10 }] },
+  { ...retained, documentId: 'retained-demo', customroute: 'matt' },
+ ], { failMedia: true });
+ assert.equal((await purgeRetained(f.strapi, now)).failed, 1);
+ assert.equal(f.rows.length, 2);
+ f.state.failMedia = false;
+ assert.equal((await purgeRetained(f.strapi, now)).erased, 1);
+ assert.deepEqual(f.deleted, ['requested-demo']);
+ assert.deepEqual(f.removed, [10]);
+ assert.equal(f.rows[0].documentId, 'retained-demo');
+});
 test('retention scan paginates past 200 active drafts, skips demos and continues past invalid dates', async () => {
  const active = Array.from({ length: 200 }, (_, i) => ({ ...retained, documentId: `live-${i}` }));
  const f = cleanupFixture([...active,

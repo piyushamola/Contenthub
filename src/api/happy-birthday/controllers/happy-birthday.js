@@ -9,6 +9,7 @@ const { createCoreController } = require('@strapi/strapi').factories;
 const isServerToken = require('../policies/story-server');
 const { isInternalStoryDraftLink } = require('../utils/birthday-story');
 const { presentSchedule, resolveTrigger } = require('../utils/celebration-schedule');
+const { eraseOwnedCelebration } = require('../../../privacy/regional-celebration-erasure');
 
 function applyTriggerTime(data) {
   if (!data || typeof data !== 'object') return null;
@@ -158,6 +159,7 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
   },
   async create(ctx) {
     const data = ctx.request.body?.data || {};
+    if (!isServerToken(ctx) && ['erasureRequestedAt', 'retentionExpiresAt'].some(key => Object.hasOwn(data, key))) return ctx.forbidden('Retention fields are managed by the server');
     if (!isServerToken(ctx) && Object.keys(data).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
     const triggerError = applyTriggerTime(data);
     if (triggerError) return ctx.badRequest(triggerError);
@@ -175,6 +177,7 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     const pending = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, erasureRequestedAt: { $notNull: true } } });
     if (pending) return ctx.conflict('Deletion is in progress');
     const data = ctx.request.body?.data || {};
+    if (!isServerToken(ctx) && ['erasureRequestedAt', 'retentionExpiresAt'].some(key => Object.hasOwn(data, key))) return ctx.forbidden('Retention fields are managed by the server');
     if (!isServerToken(ctx)) {
       const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });
       if (story || Object.keys(data).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
@@ -185,11 +188,20 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     return super.update(ctx);
   },
   async delete(ctx) {
-    if (!isServerToken(ctx)) {
-      const story = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, journeyType: 'story' } });
-      if (story) return ctx.forbidden('Use the Birthday Story dashboard');
-    }
+    if (!isServerToken(ctx)) return ctx.forbidden('Use the celebration dashboard');
     return super.delete(ctx);
+  },
+  async erase(ctx) {
+    try {
+      const { ownerId, country } = ctx.request.body || {};
+      const result = await eraseOwnedCelebration(strapi, ctx.params.documentId, ownerId, country);
+      if (!result) return ctx.notFound('Celebration not found');
+      ctx.status = result.pending ? 202 : 200;
+      ctx.body = result;
+    } catch (error) {
+      ctx.status = error.status || 503;
+      ctx.body = { error: { message: error.status ? error.message : 'Could not finish permanent deletion. Please retry.' } };
+    }
   },
   async mine(ctx) {
     const userId = ctx.state.user?.id;

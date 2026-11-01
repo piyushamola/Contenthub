@@ -15,6 +15,15 @@ const UID = 'api::happy-birthday.happy-birthday';
 
 const customRoutes = [
   {
+    method: 'DELETE',
+    path: '/happy-birthdays/:documentId/erase',
+    handler: 'happy-birthday.erase',
+    config: {
+      auth: { scope: ['api::celebration-purchase.celebration-purchase.createOrder'] },
+      policies: ['api::happy-birthday.story-server'],
+    },
+  },
+  {
     method: 'GET',
     path: '/happy-birthdays/mine',
     handler: 'happy-birthday.mine',

@@ -41,8 +41,11 @@ module.exports = ({ strapi }) => {
         await locked(orderKey, async current => {
           if (current.erased) return;
           if (current.stopRequested) return;
-          if (body.stop === true) {
-            await query().update({where:{id:current.id},data:{stopRequested:true,state:'hold',reason:'cancelled_or_refunded',
+          if (body.stop === true || body.issues?.includes('manual_customization')) {
+            // A manual-order tombstone survives property/SKU edits and delayed
+            // deliveries. Adding a mapping must never opt an old order in.
+            await query().update({where:{id:current.id},data:{stopRequested:true,state:'hold',
+              reason:body.stop===true?'cancelled_or_refunded':'manual_customization',
               adminRevision:(current.adminRevision||0)+1,leaseToken:null,leaseUntil:null}}); return;
           }
           if (current.sourceUpdatedAt && Date.parse(body.sourceUpdatedAt) < Date.parse(current.sourceUpdatedAt)) return;

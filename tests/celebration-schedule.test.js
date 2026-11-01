@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  assertStoryCheckoutSchedule,
   resolveTrigger,
   storyTriggerExpiry,
   storyTriggerPatch,
@@ -82,7 +83,38 @@ test('a published story keeps the trigger time that was set in the form', () => 
     () => storyTriggerPatch(published, { triggerLocal: '2026-10-08T01:00' }, now),
     /only set the trigger time once/,
   );
+  assert.throws(() => storyTriggerPatch(published, { triggerLocal: '' }), /only set the trigger time once/);
   assert.deepEqual(storyTriggerPatch({ storyFirstPublishedAt: null }, {}, now), {});
+});
+
+test('private Story checkpoints keep old opening times but checkout requires an explicit correction', () => {
+  const now = Date.parse('2026-11-01T09:00:00.000Z');
+  const entry = { country: 'IN', storyFirstPublishedAt: null };
+  const saved = storyTriggerPatch(entry, { triggerLocal: '2026-11-01T14:29', browserTimeZone: 'America/Los_Angeles' });
+  assert.deepEqual(saved, { triggerAt: '2026-11-01T08:59:00.000Z', timezone: 'Asia/Kolkata' });
+  assert.deepEqual(storyTriggerPatch({ ...entry, ...saved }, { triggerLocal: '2026-11-01T14:29' }), saved);
+  assert.deepEqual(storyTriggerPatch({ ...entry, ...saved }, { editorStep: 1 }), {});
+  assert.throws(() => assertStoryCheckoutSchedule({ ...entry, ...saved }, now), /Start after payment/);
+  const cleared = storyTriggerPatch({ ...entry, ...saved }, { triggerLocal: '' });
+  assert.deepEqual(cleared, { triggerAt: null, timezone: null });
+  assert.doesNotThrow(() => assertStoryCheckoutSchedule({ ...entry, ...cleared }, now));
+  const rescheduled = storyTriggerPatch({ ...entry, ...saved }, { triggerLocal: '2026-11-02T14:30' });
+  assert.equal(rescheduled.triggerAt, '2026-11-02T09:00:00.000Z');
+  assert.doesNotThrow(() => assertStoryCheckoutSchedule({ ...entry, ...rescheduled }, now));
+  assert.match(resolveTrigger({ country: 'IN', localTime: '2026-11-01T14:29', now }).error, /at least a minute/);
+});
+
+test('Story checkout boundaries leave published updates alone and reject invalid or distant draft schedules', () => {
+  const now = Date.parse('2026-11-01T09:00:00.000Z');
+  assert.throws(() => assertStoryCheckoutSchedule({ triggerAt: new Date(now + 59_999).toISOString() }, now), /less than a minute/);
+  assert.doesNotThrow(() => assertStoryCheckoutSchedule({ triggerAt: new Date(now + 60_000).toISOString() }, now));
+  assert.throws(() => assertStoryCheckoutSchedule({ triggerAt: 'bad-date' }, now), /valid opening time/);
+  const farFuture = storyTriggerPatch({ country: 'IN' }, { triggerLocal: '2028-11-01T14:30' });
+  assert.throws(() => assertStoryCheckoutSchedule(farFuture, now), /within the next year/);
+  assert.doesNotThrow(() => assertStoryCheckoutSchedule({ triggerAt: '2026-10-01T00:00:00.000Z', storyFirstPublishedAt: '2026-09-30T00:00:00.000Z' }, now));
+  for (const triggerLocal of ['bad', '2026-02-30T12:00', '2026-03-08T02:30']) {
+    assert.throws(() => storyTriggerPatch({ country: 'US' }, { triggerLocal, browserTimeZone: 'America/New_York' }), /valid date and time/);
+  }
 });
 
 test('a story without a trigger lasts 24 hours from publish, and a passed trigger cannot be published', () => {

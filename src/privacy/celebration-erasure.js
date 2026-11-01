@@ -23,10 +23,10 @@ function celebrationRetentionDate(celebration) {
   return retentionDate(anchor);
 }
 
-async function eraseCelebration(strapi, documentId) {
+async function eraseCelebration(strapi, documentId, { allowDemo = false } = {}) {
   const rows = await strapi.db.query(UID).findMany({ where: { documentId }, populate: { images: true, storyAssets: true } });
   if (!rows.length) return null;
-  if (rows.some(row => DEMOS.has(String(row.customroute).toLowerCase()))) throw new Error('Demo celebrations cannot be erased here');
+  if (!allowDemo && rows.some(row => DEMOS.has(String(row.customroute).toLowerCase()))) throw new Error('Demo celebrations cannot be erased here');
   const customroute = rows[0].customroute;
   const rowIds = new Set(rows.map(row => row.id));
   const mediaIds = new Set(rows.flatMap(row => [...(row.images || []), ...(row.storyAssets || [])]).map(file => file.id));
@@ -64,7 +64,7 @@ async function purgeRetained(strapi, now = Date.now()) {
     if (!rows.length) break;
     cursor = rows[rows.length - 1].id;
     for (const row of rows) {
-      if (DEMOS.has(String(row.customroute).toLowerCase())) continue;
+      if (DEMOS.has(String(row.customroute).toLowerCase()) && !row.erasureRequestedAt) continue;
       try {
         const published = await strapi.db.query(UID).findOne({ where: { documentId: row.documentId, publishedAt: { $notNull: true } } });
         if (published && !row.erasureRequestedAt) continue;
@@ -77,7 +77,9 @@ async function purgeRetained(strapi, now = Date.now()) {
           }
           if (Date.parse(deadline) > now) continue;
         }
-        if (await eraseCelebration(strapi, row.documentId)) result.erased++;
+        // Demo records only acquire this private marker through an explicit
+        // admin erasure. Preserve retries without exposing demos to retention.
+        if (await eraseCelebration(strapi, row.documentId, { allowDemo: Boolean(row.erasureRequestedAt) })) result.erased++;
       } catch {
         result.failed++;
         strapi.log.error('Privacy erasure failed; retained for retry or date review');

@@ -8,6 +8,7 @@ const { createStrapi } = require('@strapi/strapi');
 const {
   normalizeStory,
 } = require('../src/api/happy-birthday/utils/birthday-story');
+const { formatLocal } = require('../src/api/happy-birthday/utils/celebration-schedule');
 const disposablePostgres = process.env.DATABASE_CLIENT === 'postgres' &&
   process.env.REGRESSION_DISPOSABLE_POSTGRES === 'true' &&
   process.env.DATABASE_HOST === '127.0.0.1' &&
@@ -68,7 +69,18 @@ let app;
     user.id,
     { ...draft.content, forName: 'Aanya' },
     draft.revision,
+    { editorStep: 1 },
   );
+  assert.equal(draft.editorStep, 1);
+  assert.equal((await service.read(draft.documentId, user.id)).editorStep, 1);
+  for (const editorStep of [-1, 8, 0.5, '3', null]) {
+    await assert.rejects(() => service.save(draft.documentId, user.id, draft.content, draft.revision, { editorStep }), /Invalid story step/);
+  }
+  assert.equal((await service.read(draft.documentId, user.id)).revision, draft.revision);
+  const previousRevision = draft.revision;
+  draft = await service.save(draft.documentId, user.id, draft.content, draft.revision, { editorStep: 2 });
+  assert.equal(draft.editorStep, 2);
+  assert.equal(draft.revision, previousRevision, 'Changing only the resume chapter must not create unpublished content changes');
   assert.equal(draft.content.slug, '', 'Saving an incomplete draft must not fill its link');
   assert.equal(draft.slug, internalDraftRoute, 'The private draft keeps its storage route');
   for (const reservedRoute of [internalDraftRoute, `story-${crypto.randomUUID()}`]) {
@@ -269,6 +281,27 @@ let app;
     id: 'order_story_test',
     status: 'created',
   });
+  // A returning creator can edit and navigate a real persisted draft whose
+  // opening time has passed, including its previously attached media.
+  const oldOpeningTime = formatLocal(new Date(Date.now() - 120_000).toISOString(), 'Asia/Kolkata');
+  draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: oldOpeningTime, editorStep: 3 });
+  const retainedAssets = draft.assets.map((asset) => asset.id);
+  draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: oldOpeningTime, editorStep: 2 });
+  assert.equal(draft.editorStep, 2);
+  assert.equal(draft.triggerLocal, oldOpeningTime);
+  assert.deepEqual(draft.assets.map((asset) => asset.id), retainedAssets);
+  assert.equal((await service.read(draft.documentId, user.id)).triggerLocal, oldOpeningTime);
+  const savedBeforeInvalidTime = await service.read(draft.documentId, user.id);
+  await assert.rejects(() => service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: '2026-02-30T12:00', editorStep: 7 }), /valid date and time/);
+  assert.deepEqual(await service.read(draft.documentId, user.id), savedBeforeInvalidTime, 'Invalid wall times cannot partly change content, chapter or media');
+  const checkoutInput = { slug: content.slug, purchaseId: crypto.randomUUID(), country: 'IN', ownerId: user.id };
+  await assert.rejects(() => payments.createOrder(checkoutInput), /Start after payment/);
+  assert.equal(await app.db.query('api::celebration-purchase.celebration-purchase').count({ where: { celebrationDocumentId: draft.documentId } }), 0);
+  const futureOpeningTime = formatLocal(new Date(Date.now() + 3_600_000).toISOString(), 'Asia/Kolkata');
+  draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: futureOpeningTime, editorStep: 0 });
+  assert.equal((await service.read(draft.documentId, user.id)).triggerLocal, futureOpeningTime);
+  draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: '' });
+  assert.equal(draft.triggerAt, null);
   await assert.rejects(
     () =>
       payments.createOrder({
@@ -287,6 +320,10 @@ let app;
   });
   assert.equal(order.amount, 3600);
   assert.equal(order.currency, 'INR');
+  // An already-created provider order must not bypass the schedule guard.
+  draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: oldOpeningTime });
+  await assert.rejects(() => payments.createOrder(checkoutInput), /Start after payment/);
+  draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: '' });
   const retry = await payments.createOrder({
     slug: content.slug,
     purchaseId: crypto.randomUUID(),

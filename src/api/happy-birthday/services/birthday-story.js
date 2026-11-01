@@ -1,4 +1,5 @@
 'use strict';
+const { isDeepStrictEqual } = require('node:util');
 
 const {
   normalizeStory,
@@ -18,6 +19,7 @@ const {
 const UID = 'api::happy-birthday.happy-birthday';
 const PURCHASE = 'api::celebration-purchase.celebration-purchase';
 const populate = { owner: true, storyAssets: true };
+const { storyEditorStep } = require('../utils/story-editor-step');
 
 function standardMessages(value) {
   if (typeof value === 'string') {
@@ -93,12 +95,17 @@ module.exports = ({ strapi }) => ({
       : await this.owned(documentId, ownerId);
     if (!entry) throw new Error('Story not found');
     const generatedDraftLink = isInternalStoryDraftLink(entry);
+    const linkLocked = Boolean(entry.storyFirstPublishedAt) || (!generatedDraftLink && await strapi.db.query(PURCHASE).count({
+      where: { celebrationDocumentId: documentId, productType: 'story' },
+    }) > 0);
     return {
       documentId,
       content: generatedDraftLink
         ? { ...entry.storyContent, slug: '' }
         : entry.storyContent,
       revision: entry.storyRevision,
+      editorStep: storyEditorStep(entry.storyEditorStep ?? undefined),
+      linkLocked,
       assets: (entry.storyAssets || []).map((a) => ({
         id: a.id,
         url: a.url,
@@ -209,11 +216,18 @@ module.exports = ({ strapi }) => ({
         }
       }
       const triggerPatch = storyTriggerPatch(entry, trigger);
+      const editorStep = storyEditorStep(trigger.editorStep, entry.storyEditorStep || 0);
+      const triggerChanged = Object.entries(triggerPatch).some(([key, value]) => key === 'triggerAt'
+        ? (value ? Date.parse(value) : null) !== (entry[key] ? Date.parse(entry[key]) : null)
+        : (value ?? null) !== (entry[key] ?? null));
+      // Merely visiting another chapter must not create unpublished content edits.
+      const stepOnly = trigger.editorStep !== undefined && !triggerChanged && isDeepStrictEqual(content, entry.storyContent);
       const result = await strapi.db.query(UID).updateMany({
-        where: { id: entry.id, storyRevision: revision },
+        where: { id: entry.id, storyRevision: revision, erasureRequestedAt: null },
         data: {
           storyContent: content,
-          storyRevision: revision + 1,
+          storyRevision: stepOnly ? revision : revision + 1,
+          storyEditorStep: editorStep,
           customroute: content.slug || entry.customroute,
           personname: content.forName,
           hostname: content.hostName,

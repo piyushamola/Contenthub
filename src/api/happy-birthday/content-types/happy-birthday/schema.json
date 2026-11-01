@@ -140,6 +140,13 @@
       "type": "integer",
       "default": 0
     },
+    "storyEditorStep": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 7,
+      "private": true
+    },
     "storyPublishedRevision": {
       "type": "integer",
       "default": 0

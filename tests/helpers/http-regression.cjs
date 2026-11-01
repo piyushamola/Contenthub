@@ -99,8 +99,7 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
       method: 'DELETE', headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
       signal: AbortSignal.timeout(10_000),
     });
-    // Strapi's fallback can return a plain-text 405 for an unmatched mutation.
-    assert.ok([404, 405].includes(removedErasure.status), 'Celebrations have no self-service erasure endpoint');
+    assert.ok([401, 403].includes(removedErasure.status), 'Regional erasure requires the internal server token, never a browser JWT');
   }
   assert.deepEqual(await app.db.query('api::happy-birthday.happy-birthday').findMany({
     where: { documentId: celebration.documentId }, orderBy: { id: 'asc' },

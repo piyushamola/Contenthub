@@ -963,6 +963,16 @@ export interface ApiHappyBirthdayHappyBirthday
     storyAssets: Schema.Attribute.Media<'images' | 'audios', true> &
       Schema.Attribute.Private;
     storyContent: Schema.Attribute.JSON & Schema.Attribute.Private;
+    storyEditorStep: Schema.Attribute.Integer &
+      Schema.Attribute.Private &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 7;
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
     storyExpiredAt: Schema.Attribute.DateTime;
     storyFirstPublishedAt: Schema.Attribute.DateTime;
     storyPublishedContent: Schema.Attribute.JSON;

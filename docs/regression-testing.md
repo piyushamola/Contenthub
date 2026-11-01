@@ -1,5 +1,83 @@
 # Regression checks
 
+## November 1 permanent holds for manual personalized orders
+
+The existing POD capture action now persists a permanent manual-order stop
+tombstone when trusted Next.js intake reports `manual_customization`. Future
+mapping changes, property edits or duplicate/newer webhooks cannot queue that
+order. Existing cancellation/refund and lease handling remain. No schema or
+token permission changed; deploy this backend before the Next.js marker/SKU
+guard. The HTTP/database helper covers this persisted state on SQLite and the
+selected disposable PostgreSQL mode, and the frontend adds a real signed
+Next.js/Strapi stack case (POD-18).
+
+The requested customer customization-save API/storage is absent from these
+checkouts after the older mug workflow's October 27 removal. Read-only inspection
+of the owner's live mug page found browser-generated Shopify attachments, not
+a customer-save backend. The minimum shared API/storage addition is proposed;
+the six-product extension is not implemented or enabled by this safeguard. See
+[the coordinated status](../../birthday-celebration/docs/2026-11-01-personalized-products-implementation.md).
+Complete regression was requested. The final backend `check` passed all 181
+units, SQLite integration, disposable-server checks and admin build. Disposable
+PostgreSQL integration also passed, including the new manual tombstone. A
+focused three-browser POD admin rerun passed 9/9 after the build. The full
+cross-app/browser runs retain failures; see the exact
+[dated execution report](../../birthday-celebration/docs/test-runs/2026-11-01-personalized-products-regression.md).
+
+## November 1 admin permanent deletion in every country
+
+The erasure service now re-fetches the session actor's users-permissions account
+and role. An unblocked `admin` can erase another owner's, anonymous, active or
+retained entry without a country restriction. Other actors retain the existing
+country/ownership rules. Request-body admin flags are ignored. Explicit admin
+demo erasure is supported with queued retries; ordinary retention still skips
+unrequested demos. Unit and real HTTP/database coverage includes denied/forged
+or revoked roles and full uploaded-file removal. The matching frontend has
+admin search/confirmation and real-stack coverage. See
+[the cross-app admin notes](../../birthday-celebration/docs/2026-11-01-admin-permanent-deletion.md).
+No tests, HTTP probes, integration runs, builds or typechecks were executed.
+
+## November 1 permanent-delete request-body repair
+
+`strapi::body` explicitly parses POST/PUT/PATCH/DELETE. The previous koa-body
+default omitted DELETE, so the internal erasure handler received no owner or
+country and denied a valid request. New parser coverage exercises the actual
+configured parser over disposable loopback HTTP. The real Strapi privacy helper
+also covers deleting an active document's draft/published rows and media files,
+with file-removal assertions for retained Standard and partial Story entries.
+The matching Next.js route preserves failure categories and keeps private
+upstream details out of responses. Restart Contenthub after this configuration
+change. See [the cross-app notes](../../birthday-celebration/docs/2026-11-01-permanent-delete-request-fix.md).
+No tests, HTTP probes, builds, typechecks or other verification commands ran.
+
+## November 1 expired Story draft opening times
+
+Story draft saves now validate the date/time and time zone separately from
+checkout's future-time window. Old times remain saved until the owner explicitly
+reschedules or clears them. The order service enforces the window before both
+new orders and existing-order reuse; published updates and captured-payment
+recovery retain their existing rules. Unit and real Strapi/database cases were
+extended, with matching Next.js fixture contracts and a real cross-app journey.
+See [the cross-app schedule notes](../../birthday-celebration/docs/2026-11-01-story-draft-schedule-recovery.md).
+No tests, integration/HTTP checks, builds, typechecks or other verification
+commands were executed. Deploy this backend change before the frontend.
+
+## November 1 Story checkpoints and regional permanent deletion
+
+Partial Story saves accept and return a private `storyEditorStep` (0–7), with
+legacy fallback to zero and existing optimistic revision protection. Read
+responses expose the actual checkout/publication link lock. The internal-token
+erasure endpoint accepts only server-resolved owners in detected countries
+outside India; browser JWTs, missing/invalid regions and other owners are denied.
+The existing media cleanup service deletes document versions and unshared uploads,
+or acknowledges a persisted retry marker with 202 when cleanup is queued.
+Generic browser deletion and marker writes are blocked. Unit and real
+HTTP/database cases are in the existing gate, with matching frontend contracts
+and stack journeys. See the [cross-app handoff](../../birthday-celebration/docs/2026-11-01-story-checkpoints-and-regional-erasure.md).
+No tests, integration runs, typechecks, builds or other verification commands
+were executed; the current request did not opt into testing. Deploy this backend
+and its additive schema attribute before the corresponding frontend.
+
 ## October 31 stash recovery and celebration erasure removal
 
 Restored the October 31 stash containing one-year retention, scheduled cleanup,

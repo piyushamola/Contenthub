@@ -100,6 +100,20 @@ module.exports = async (app, base, jwt, broad) => {
     assert.equal((await request(editable)).status,200); assert.equal((await get(editableKey)).state,'hold');
     console.log('PASS: cancellation/refund before payment and removing all personalized lines cannot be restored by delayed events.');
 
+    const manual=event('8010');
+    manual.issues=['manual_customization'];
+    manual.sourceDigest=hash({snapshot:manual.snapshot,issues:manual.issues,stop:false});
+    const manualKey=(await request(manual)).body.orderKey;
+    assert.equal((await get(manualKey)).reason,'manual_customization');
+    assert.equal((await get(manualKey)).stopRequested,true);
+    const newlyMapped=event('8010');newlyMapped.sourceUpdatedAt='2026-10-28T12:00:00Z';
+    await Promise.all(Array.from({length:4},()=>request(newlyMapped).then(result=>assert.equal(result.status,200))));
+    assert.equal((await get(manualKey)).state,'hold');
+    assert.equal((await get(manualKey)).reason,'manual_customization');
+    assert.equal((await get(manualKey)).providerId,null);
+    assert.equal((await get(manualKey)).snapshot,null);
+    console.log('PASS: manual orders remain permanently held after new mappings, property edits and duplicate deliveries.');
+
     const retryable=event('8004'),retryKey=(await request(retryable)).body.orderKey;
     const revision=event('8004',{totalPaise:39900}); revision.sourceUpdatedAt='2026-10-27T14:00:00Z';
     const stopTransaction=app.db.lifecycles.subscribe({models:['api::pod-order.pod-order'],beforeUpdate(event){

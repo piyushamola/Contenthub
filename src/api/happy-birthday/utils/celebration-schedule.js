@@ -175,6 +175,15 @@ function zonedLocalToUtc(localTime, timeZone) {
   return new Date(utc).toISOString();
 }
 
+function parseTrigger({ country, existingTimezone, browserTimeZone, localTime }) {
+  const timezone = timezoneForCountry(country, browserTimeZone, existingTimezone);
+  const triggerAt = zonedLocalToUtc(localTime, timezone);
+  if (!triggerAt) {
+    return { error: 'Choose a valid date and time. That clock time needs to exist in the celebration time zone.' };
+  }
+  return { triggerAt, timezone };
+}
+
 function resolveTrigger({
   country,
   existingTimezone,
@@ -182,11 +191,9 @@ function resolveTrigger({
   localTime,
   now = Date.now(),
 }) {
-  const timezone = timezoneForCountry(country, browserTimeZone, existingTimezone);
-  const triggerAt = zonedLocalToUtc(localTime, timezone);
-  if (!triggerAt) {
-    return { error: 'Choose a valid date and time. That clock time needs to exist in the celebration time zone.' };
-  }
+  const parsed = parseTrigger({ country, existingTimezone, browserTimeZone, localTime });
+  if (parsed.error) return parsed;
+  const { triggerAt, timezone } = parsed;
   const triggerMs = Date.parse(triggerAt);
   if (triggerMs < now + MIN_LEAD_MS) {
     return { error: 'Choose a time at least a minute from now.' };
@@ -221,7 +228,7 @@ function isBeforeTrigger(triggerAt, now = Date.now()) {
   return Number.isFinite(parsed) && parsed > now;
 }
 
-function storyTriggerPatch(entry, trigger = {}, now = Date.now()) {
+function storyTriggerPatch(entry, trigger = {}) {
   if (!Object.prototype.hasOwnProperty.call(trigger, 'triggerLocal') || trigger.triggerLocal === undefined) {
     return {};
   }
@@ -232,15 +239,30 @@ function storyTriggerPatch(entry, trigger = {}, now = Date.now()) {
     throw new Error('You can only set the trigger time once. It cannot be changed after you publish.');
   }
   if (!nextLocal) return { triggerAt: null, timezone: null };
-  const resolved = resolveTrigger({
+  // A private draft may outlive its opening time. Validate the wall clock here;
+  // enforce the future window only when the creator starts/retries checkout.
+  const resolved = parseTrigger({
     country: entry?.country,
     existingTimezone: entry?.timezone,
     browserTimeZone: trigger.browserTimeZone,
     localTime: nextLocal,
-    now,
   });
   if (resolved.error) throw new Error(resolved.error);
   return { triggerAt: resolved.triggerAt, timezone: resolved.timezone };
+}
+
+function assertStoryCheckoutSchedule(entry, now = Date.now()) {
+  if (entry?.storyFirstPublishedAt || entry?.triggerAt == null) return;
+  const triggerMs = Date.parse(entry.triggerAt);
+  if (!Number.isFinite(triggerMs)) {
+    throw new Error('Choose a valid opening time or Start after payment before checkout.');
+  }
+  if (triggerMs < now + MIN_LEAD_MS) {
+    throw new Error('Your saved opening time has passed or is less than a minute away. Choose a future time or Start after payment before checkout.');
+  }
+  if (triggerMs > now + MAX_LEAD_MS) {
+    throw new Error('Choose an opening time within the next year or Start after payment before checkout.');
+  }
 }
 
 function storyTriggerExpiry(entry, publishedAt, now = Date.now()) {
@@ -253,6 +275,7 @@ function storyTriggerExpiry(entry, publishedAt, now = Date.now()) {
 }
 
 module.exports = {
+  assertStoryCheckoutSchedule,
   TIME_ZONES,
   formatLocal,
   isBeforeTrigger,

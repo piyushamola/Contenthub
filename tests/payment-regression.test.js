@@ -48,6 +48,7 @@ function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 10
         if ('$eqi' in expected) return row[key]?.toLowerCase() === expected.$eqi;
         if ('$notNull' in expected) return row[key] != null;
         if ('$ne' in expected) return row[key] !== expected.$ne;
+        if ('$in' in expected) return expected.$in.includes(row[key]);
         assert.fail(`Unsupported fixture filter for ${key}`);
       }
       return row[key] === expected;
@@ -129,6 +130,33 @@ test('checkout cannot reuse another celebration payment attempt', async () => {
     slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42,
   }), /another celebration/);
   assert.deepEqual(f.providerCalls, []);
+});
+
+test('Story checkout rejects an old draft schedule for both new and existing orders without provider calls', async () => {
+  for (const existingOrder of [false, true]) {
+    const f = fixture({
+      celebration: { journeyType: 'story', storyFirstPublishedAt: null, expiresAt: null, triggerAt: new Date(Date.now() - 60_000).toISOString() },
+      purchase: { productType: 'story' },
+    });
+    if (!existingOrder) f.rows[PURCHASE_UID].length = 0;
+    await assert.rejects(f.service.createOrder({ slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42 }), /Start after payment/);
+    assert.deepEqual(f.providerCalls, []);
+    assert.equal(f.rows[PURCHASE_UID].length, existingOrder ? 1 : 0);
+    if (existingOrder) assert.equal(f.purchase.status, 'created');
+  }
+});
+
+test('a Story with a corrected future time or no schedule can reuse its original checkout', async () => {
+  for (const triggerAt of [null, new Date(Date.now() + 3_600_000).toISOString()]) {
+    const f = fixture({
+      celebration: { journeyType: 'story', storyFirstPublishedAt: null, expiresAt: null, triggerAt },
+      purchase: { productType: 'story' },
+    });
+    const order = await f.service.createOrder({ slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42 });
+    assert.equal(order.orderId, 'order_1');
+    assert.equal(order.purchaseId, PURCHASE_ID);
+    assert.deepEqual(f.providerCalls, []);
+  }
 });
 
 test('payment verification rejects tampered signatures and mismatched orders without contacting provider', async () => {

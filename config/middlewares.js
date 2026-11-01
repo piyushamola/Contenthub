@@ -9,6 +9,9 @@ module.exports = [
   {
     name: "strapi::body",
     config: {
+      // Internal erasure requests carry the verified owner and country in JSON.
+      // koa-body otherwise skips DELETE and the controller receives an empty body.
+      parsedMethods: ["POST", "PUT", "PATCH", "DELETE"],
       multipart: true,
       formLimit: "256mb",
       jsonLimit: "256mb",

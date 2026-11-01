@@ -8,6 +8,7 @@ const WEBHOOK_UID = 'api::payment-webhook-event.payment-webhook-event';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
 const PRICING_UID = 'api::premium-pricing.premium-pricing';
 const { celebrationExpiresAt } = require('../../happy-birthday/utils/celebration-expiry');
+const { assertStoryCheckoutSchedule } = require('../../happy-birthday/utils/celebration-schedule');
 const DEMO_SLUGS = new Set(
   (process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || 'elena,matt,mike')
     .split(',')
@@ -164,6 +165,10 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     }
     if (access.unlocked) return { alreadyUnlocked: true, access };
 
+    // Run before returning an existing provider order too. Draft saves retain
+    // old schedules, but starting checkout must require an explicit correction.
+    if (celebration.journeyType === 'story') assertStoryCheckoutSchedule(celebration);
+
     let existing = celebration.journeyType === 'story'
       ? await strapi.db.query(PURCHASE_UID).findOne({ where: { celebrationDocumentId: celebration.documentId, productType: 'story', status: { $in: ['creating', 'created', 'paid'] } }, orderBy: { createdAt: 'desc' } })
       : await strapi.db.query(PURCHASE_UID).findOne({ where: { purchaseId } });
@@ -200,6 +205,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
     // already exists keeps the amount recorded when it was created.
     if (celebration.journeyType === 'story' && celebration.storyFirstPublishedAt) throw new Error('This story cannot be republished');
     const storyDraft = celebration.journeyType === 'story' ? await strapi.service('api::happy-birthday.birthday-story').owned(celebration.documentId, normalizedOwnerId) : null;
+    if (storyDraft) assertStoryCheckoutSchedule(storyDraft);
     const storySnapshot = storyDraft ? await strapi.service('api::happy-birthday.birthday-story').snapshot(storyDraft) : null;
     const offer = offerForCountry(billingCountry(celebration, country), prices);
     const receipt = `whb_${purchaseId.replace(/-/g, '').slice(0, 28)}`;
