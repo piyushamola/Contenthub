@@ -1308,7 +1308,7 @@ export interface ApiPremiumPricingPremiumPricing
   extends Struct.SingleTypeSchema {
   collectionName: 'premium_pricings';
   info: {
-    description: 'One price for India and one price for all other countries';
+    description: 'Configurable regional pricing for India (INR), UK (GBP), Eurozone (EUR), and all other countries (USD)';
     displayName: 'Premium pricing';
     pluralName: 'premium-pricings';
     singularName: 'premium-pricing';
@@ -1320,6 +1320,20 @@ export interface ApiPremiumPricingPremiumPricing
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    europeOriginalPriceEur: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    europePriceEur: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     indiaOriginalPriceRupees: Schema.Attribute.Decimal &
       Schema.Attribute.SetMinMax<
         {
@@ -1359,6 +1373,20 @@ export interface ApiPremiumPricingPremiumPricing
       > &
       Schema.Attribute.DefaultTo<1>;
     publishedAt: Schema.Attribute.DateTime;
+    storyEuropeOriginalPriceEur: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    storyEuropePriceEur: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     storyIndiaOriginalPriceRupees: Schema.Attribute.Decimal &
       Schema.Attribute.SetMinMax<
         {
@@ -1391,6 +1419,34 @@ export interface ApiPremiumPricingPremiumPricing
         number
       > &
       Schema.Attribute.DefaultTo<5>;
+    storyUkOriginalPriceGbp: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    storyUkPriceGbp: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    ukOriginalPriceGbp: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    ukPriceGbp: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

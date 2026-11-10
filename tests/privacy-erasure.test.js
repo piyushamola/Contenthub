@@ -81,10 +81,10 @@ test('retention adds one calendar year and clamps leap day without changing the 
  assert.throws(() => retentionDate(Number.NaN), RangeError);
 });
 test('retention follows the original public window and never-published drafts follow creation', () => {
- assert.equal(celebrationRetentionDate(retained), '2027-08-02T12:00:00.000Z');
- assert.equal(celebrationRetentionDate({ ...retained, triggerAt: '2026-08-20T15:00:00.000Z' }), '2027-08-21T15:00:00.000Z');
- assert.equal(celebrationRetentionDate({ ...retained, journeyType: 'story', storyFirstPublishedAt: '2026-08-01T12:00:00.000Z' }), '2027-08-02T12:00:00.000Z');
- assert.equal(celebrationRetentionDate({ ...retained, journeyType: 'story', triggerAt: '2030-08-01T12:00:00.000Z', updatedAt: '2026-10-30T00:00:00.000Z' }), '2027-08-01T12:00:00.000Z');
+  assert.equal(celebrationRetentionDate(retained), '2027-08-02T12:00:00.000Z');
+  assert.equal(celebrationRetentionDate({ ...retained, triggerAt: '2026-08-20T15:00:00.000Z' }), '2027-08-21T15:00:00.000Z');
+  assert.equal(celebrationRetentionDate({ ...retained, journeyType: 'story', storyFirstPublishedAt: '2026-08-01T12:00:00.000Z', expiresAt: '2026-08-08T12:00:00.000Z' }), '2027-08-08T12:00:00.000Z');
+  assert.equal(celebrationRetentionDate({ ...retained, journeyType: 'story', triggerAt: '2030-08-01T12:00:00.000Z', updatedAt: '2026-10-30T00:00:00.000Z' }), '2027-08-01T12:00:00.000Z');
  assert.throws(() => celebrationRetentionDate({ createdAt: 'invalid' }), /valid original date/);
 });
 test('legacy due and future 30-day deadlines are replaced using original dates, once', async () => {

@@ -58,7 +58,7 @@ async function purgeRetained(strapi, now = Date.now()) {
     // they become due, including entries with a future legacy deadline.
     const rows = await strapi.db.query(UID).findMany({
       where: { id: { $gt: cursor }, publishedAt: null },
-      select: ['id', 'documentId', 'customroute', 'journeyType', 'storyFirstPublishedAt', 'createdAt', 'expiresAt', 'triggerAt', 'retentionExpiresAt', 'erasureRequestedAt'],
+      select: ['id', 'documentId', 'customroute', 'journeyType', 'storyFirstPublishedAt', 'premiumUnlocked', 'createdAt', 'expiresAt', 'triggerAt', 'retentionExpiresAt', 'erasureRequestedAt'],
       orderBy: { id: 'asc' }, limit: 200,
     });
     if (!rows.length) break;

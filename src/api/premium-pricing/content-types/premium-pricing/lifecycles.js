@@ -3,7 +3,17 @@
 const { errors } = require('@strapi/utils');
 
 const CURRENT_FIELDS = ['indiaPriceRupees', 'otherCountriesPriceUsd', 'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd'];
-const ORIGINAL_FIELDS = ['indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd'];
+const OPTIONAL_CURRENT_FIELDS = ['ukPriceGbp', 'europePriceEur', 'storyUkPriceGbp', 'storyEuropePriceEur'];
+const ORIGINAL_FIELDS = [
+  'indiaOriginalPriceRupees',
+  'otherCountriesOriginalPriceUsd',
+  'ukOriginalPriceGbp',
+  'europeOriginalPriceEur',
+  'storyIndiaOriginalPriceRupees',
+  'storyOtherCountriesOriginalPriceUsd',
+  'storyUkOriginalPriceGbp',
+  'storyEuropeOriginalPriceEur',
+];
 
 function usesMinorUnits(value) {
   if (!['number', 'string'].includes(typeof value) || value === '') return false;
@@ -23,6 +33,11 @@ function validatePrices(event) {
       throw new errors.ValidationError(`${field} must be a positive amount with at most two decimal places`);
     }
   }
+  for (const field of OPTIONAL_CURRENT_FIELDS) {
+    if (Object.hasOwn(data, field) && data[field] !== null && data[field] !== undefined && data[field] !== '' && !usesMinorUnits(data[field])) {
+      throw new errors.ValidationError(`${field} must be a positive amount with at most two decimal places`);
+    }
+  }
   // Optional comparisons do not change checkout amounts. Ignore invalid
   // precision instead of turning a rounded value into an advertised discount.
   for (const field of ORIGINAL_FIELDS) {
@@ -32,8 +47,24 @@ function validatePrices(event) {
   }
 }
 
+function notifyFrontendPriceRevalidation() {
+  const frontendUrl = process.env.FRONTEND_URL;
+  const secret = process.env.REVALIDATE_SECRET;
+  if (!frontendUrl || !secret || typeof fetch !== 'function') return;
+  void fetch(`${frontendUrl.replace(/\/$/, '')}/api/revalidate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-revalidate-secret': secret,
+    },
+    body: JSON.stringify({ event: 'entry.update', model: 'premium-pricing' }),
+  }).catch(() => {});
+}
+
 module.exports = {
   beforeCreate: validatePrices,
   beforeUpdate: validatePrices,
   beforeUpdateMany: validatePrices,
+  afterCreate: notifyFrontendPriceRevalidation,
+  afterUpdate: notifyFrontendPriceRevalidation,
 };

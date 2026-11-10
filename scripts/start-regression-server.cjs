@@ -166,7 +166,7 @@ async function main() {
       providerCalls.push({ method: init.method || 'GET', endpoint });
       if (endpoint === '/orders' && init.method === 'POST') {
         const input = JSON.parse(init.body);
-        if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || !['INR', 'USD'].includes(input.currency)) throw new Error('Invalid mock provider order');
+        if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || !['INR', 'USD', 'GBP', 'EUR'].includes(input.currency)) throw new Error('Invalid mock provider order');
         const order = { ...input, id: `order_regression${crypto.randomBytes(8).toString('hex')}`, status: 'created' };
         orders.set(order.id, order);
         return order;
@@ -204,8 +204,12 @@ async function main() {
     }
     if (route === '/pricing' && ['GET', 'PATCH'].includes(ctx.method)) {
       if (mode !== 'mock') { ctx.status = 409; ctx.body = { error: 'Pricing controls are available only in mock mode' }; return; }
-      const fields = ['indiaPriceRupees', 'otherCountriesPriceUsd', 'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd',
-        'indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd'];
+      const fields = [
+        'indiaPriceRupees', 'otherCountriesPriceUsd', 'ukPriceGbp', 'europePriceEur',
+        'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd', 'storyUkPriceGbp', 'storyEuropePriceEur',
+        'indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'ukOriginalPriceGbp', 'europeOriginalPriceEur',
+        'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd', 'storyUkOriginalPriceGbp', 'storyEuropeOriginalPriceEur',
+      ];
       let pricing = await app.db.query(PRICING_UID).findOne({});
       if (!pricing) { ctx.status = 404; ctx.body = { error: 'Regression pricing not found' }; return; }
       if (ctx.method === 'PATCH') {
@@ -255,19 +259,23 @@ async function main() {
         if (!Number.isFinite(triggerMs)) {
           ctx.status = 400; ctx.body = { error: 'A valid triggerAt is required' }; return;
         }
+        const existing = await app.db.query(UID).findOne({ where: { customroute: slug }, select: ['journeyType', 'premiumUnlocked'] });
+        if (!existing) { ctx.status = 404; ctx.body = { error: 'Celebration not found' }; return; }
+        const durationMs = existing.journeyType === 'story' || existing.premiumUnlocked ? 7 * 86_400_000 : 86_400_000;
         const triggerAt = new Date(triggerMs).toISOString();
-        const expiresAt = new Date(triggerMs + 86_400_000).toISOString();
-        const result = await app.db.query(UID).updateMany({
+        const expiresAt = new Date(triggerMs + durationMs).toISOString();
+        await app.db.query(UID).updateMany({
           where: { customroute: slug }, data: { triggerAt, expiresAt },
         });
-        if (!result.count) { ctx.status = 404; ctx.body = { error: 'Celebration not found' }; return; }
         ctx.body = { triggerAt, expiresAt };
         return;
       }
       if (ctx.method === 'POST' && celebrationMatch[2] === '/expire') {
         const expiryMs = Date.now() - 60_000;
+        const existing = await app.db.query(UID).findOne({ where: { customroute: slug }, select: ['journeyType', 'premiumUnlocked'] });
+        const durationMs = existing?.journeyType === 'story' || existing?.premiumUnlocked ? 7 * 86_400_000 : 86_400_000;
         await app.db.query(UID).updateMany({ where: { customroute: slug, triggerAt: { $notNull: true } }, data: {
-          triggerAt: new Date(expiryMs - 86_400_000).toISOString(),
+          triggerAt: new Date(expiryMs - durationMs).toISOString(),
         } });
         await app.db.query(UID).updateMany({ where: { customroute: slug }, data: { expiresAt: new Date(expiryMs).toISOString() } });
         ctx.body = { expired: true, cleanup: await app.service(UID).unpublishExpired() };

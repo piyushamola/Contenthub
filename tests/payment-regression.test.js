@@ -177,14 +177,14 @@ test('a signed payment is unlocked only after the provider confirms capture and 
   const f = fixture();
   const signature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
     .update('order_1|pay_1').digest('hex');
-  const expiresAt = f.celebration.expiresAt;
+  const createdAtMs = Date.parse(f.celebration.createdAt);
   const access = await f.service.verifyPayment({
     purchaseId: PURCHASE_ID, orderId: 'order_1', paymentId: 'pay_1', signature,
   });
   assert.equal(access.unlocked, true);
   assert.deepEqual(access.features, ['video', 'collage']);
   assert.equal(f.celebration.premiumPaymentId, 'pay_1');
-  assert.equal(f.celebration.expiresAt, expiresAt, 'Payment must not extend the celebration');
+  assert.equal(Date.parse(f.celebration.expiresAt) - createdAtMs, 7 * 24 * 60 * 60 * 1000, 'Paid Standard Premium celebration lasts 7 days');
   assert.equal(f.purchase.status, 'paid');
   assert.deepEqual(f.providerCalls, ['/payments/pay_1', '/orders/order_1']);
 });

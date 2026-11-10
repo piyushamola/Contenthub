@@ -30,34 +30,89 @@ function originalMinorUnits(value, currentAmount) {
   }
 }
 
+function optionalCurrentMinorUnits(value, label) {
+  if (value === null || value === undefined || value === '') return null;
+  return toMinorUnits(value, label);
+}
+
+function withRegionalCurrencies(base, settings, { gbpField, gbpOriginalField, gbpLabel, eurField, eurOriginalField, eurLabel }) {
+  const GBP = optionalCurrentMinorUnits(settings?.[gbpField], gbpLabel);
+  const EUR = optionalCurrentMinorUnits(settings?.[eurField], eurLabel);
+  return {
+    ...base,
+    ...(GBP !== null ? { GBP, originalGBP: originalMinorUnits(settings?.[gbpOriginalField], GBP) } : {}),
+    ...(EUR !== null ? { EUR, originalEUR: originalMinorUnits(settings?.[eurOriginalField], EUR) } : {}),
+  };
+}
+
 module.exports = createCoreService(UID, ({ strapi }) => ({
   async storySettings() {
     const settings = await strapi.db.query(UID).findOne({
-      select: ['storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd', 'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd'],
+      select: [
+        'storyIndiaPriceRupees',
+        'storyOtherCountriesPriceUsd',
+        'storyIndiaOriginalPriceRupees',
+        'storyOtherCountriesOriginalPriceUsd',
+        'storyUkPriceGbp',
+        'storyUkOriginalPriceGbp',
+        'storyEuropePriceEur',
+        'storyEuropeOriginalPriceEur',
+      ],
     });
     const INR = toMinorUnits(settings?.storyIndiaPriceRupees ?? 36, 'Story India price');
     const USD = toMinorUnits(settings?.storyOtherCountriesPriceUsd ?? 5, 'Story other countries price');
-    return {
-      INR,
-      USD,
-      originalINR: originalMinorUnits(settings?.storyIndiaOriginalPriceRupees, INR),
-      originalUSD: originalMinorUnits(settings?.storyOtherCountriesOriginalPriceUsd, USD),
-    };
+    return withRegionalCurrencies(
+      {
+        INR,
+        USD,
+        originalINR: originalMinorUnits(settings?.storyIndiaOriginalPriceRupees, INR),
+        originalUSD: originalMinorUnits(settings?.storyOtherCountriesOriginalPriceUsd, USD),
+      },
+      settings,
+      {
+        gbpField: 'storyUkPriceGbp',
+        gbpOriginalField: 'storyUkOriginalPriceGbp',
+        gbpLabel: 'Story UK price',
+        eurField: 'storyEuropePriceEur',
+        eurOriginalField: 'storyEuropeOriginalPriceEur',
+        eurLabel: 'Story Europe price',
+      },
+    );
   },
   async currentPrices() {
     const settings = await strapi.db.query(UID).findOne({
-      select: ['indiaPriceRupees', 'otherCountriesPriceUsd', 'indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd'],
+      select: [
+        'indiaPriceRupees',
+        'otherCountriesPriceUsd',
+        'indiaOriginalPriceRupees',
+        'otherCountriesOriginalPriceUsd',
+        'ukPriceGbp',
+        'ukOriginalPriceGbp',
+        'europePriceEur',
+        'europeOriginalPriceEur',
+      ],
     });
     // The old prices stay in effect until the singleton is saved for the
     // first time in Strapi. Once saved, invalid data must fail closed.
     if (!settings) return { ...DEFAULT_PRICES, originalINR: null, originalUSD: null };
     const INR = toMinorUnits(settings.indiaPriceRupees, 'India price');
     const USD = toMinorUnits(settings.otherCountriesPriceUsd, 'Other countries price');
-    return {
-      INR,
-      USD,
-      originalINR: originalMinorUnits(settings.indiaOriginalPriceRupees, INR),
-      originalUSD: originalMinorUnits(settings.otherCountriesOriginalPriceUsd, USD),
-    };
+    return withRegionalCurrencies(
+      {
+        INR,
+        USD,
+        originalINR: originalMinorUnits(settings.indiaOriginalPriceRupees, INR),
+        originalUSD: originalMinorUnits(settings.otherCountriesOriginalPriceUsd, USD),
+      },
+      settings,
+      {
+        gbpField: 'ukPriceGbp',
+        gbpOriginalField: 'ukOriginalPriceGbp',
+        gbpLabel: 'UK price',
+        eurField: 'europePriceEur',
+        eurOriginalField: 'europeOriginalPriceEur',
+        eurLabel: 'Europe price',
+      },
+    );
   },
 }));

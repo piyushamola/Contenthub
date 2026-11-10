@@ -383,7 +383,7 @@ module.exports = ({ strapi }) => ({
       const firstPublishedAt = new Date().toISOString();
       const expiresAt = entry.triggerAt
         ? storyTriggerExpiry(entry, firstPublishedAt)
-        : celebrationExpiresAt({ createdAt: firstPublishedAt });
+        : celebrationExpiresAt({ createdAt: firstPublishedAt, journeyType: 'story', premiumUnlocked: true });
       if (entry.triggerAt && !expiresAt) {
         return {
           unlocked: false,

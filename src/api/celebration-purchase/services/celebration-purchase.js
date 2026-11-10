@@ -7,7 +7,7 @@ const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const WEBHOOK_UID = 'api::payment-webhook-event.payment-webhook-event';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
 const PRICING_UID = 'api::premium-pricing.premium-pricing';
-const { celebrationExpiresAt } = require('../../happy-birthday/utils/celebration-expiry');
+const { celebrationExpiresAt, paidCelebrationExpiresAt } = require('../../happy-birthday/utils/celebration-expiry');
 const { assertStoryCheckoutSchedule } = require('../../happy-birthday/utils/celebration-schedule');
 const DEMO_SLUGS = new Set(
   (process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || 'elena,matt,mike')
@@ -21,8 +21,26 @@ function safeMessage(error) {
   return String(error?.message || error || 'Unknown payment error').slice(0, 1000);
 }
 
+const EUROZONE_COUNTRIES = new Set([
+  'AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR',
+  'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK',
+]);
+
+function currencyForCountry(country) {
+  const code = String(country || '').trim().toUpperCase();
+  if (code === 'IN') return 'INR';
+  if (code === 'GB') return 'GBP';
+  if (EUROZONE_COUNTRIES.has(code)) return 'EUR';
+  return 'USD';
+}
+
 function offerForCountry(country, prices) {
-  const currency = String(country || '').trim().toUpperCase() === 'IN' ? 'INR' : 'USD';
+  const preferred = currencyForCountry(country);
+  const currency =
+    preferred !== 'INR' && preferred !== 'USD' &&
+    (!Number.isSafeInteger(prices?.[preferred]) || prices[preferred] <= 0)
+      ? 'USD'
+      : preferred;
   return { amountPaise: prices[currency], currency };
 }
 
@@ -281,6 +299,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       where: { documentId: purchase.celebrationDocumentId },
       select: [
         'createdAt',
+        'triggerAt',
         'expiresAt',
         'erasureRequestedAt',
         'premiumUnlocked',
@@ -339,6 +358,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       };
     }
 
+    const paidExpiresAt = paidCelebrationExpiresAt(celebrationBeforeGrant, purchasedAt) || expiresAt;
     const updateResult = await strapi.db.query(CELEBRATION_UID).updateMany({
       where: {
         documentId: purchase.celebrationDocumentId,
@@ -349,19 +369,22 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         premiumPurchasedAt: purchasedAt,
         premiumPurchaseId: purchase.purchaseId,
         premiumPaymentId: payment.id,
+        expiresAt: paidExpiresAt,
       },
     });
 
     let canonicalPaymentId = payment.id;
+    let finalExpiresAt = paidExpiresAt;
     if (!updateResult?.count) {
       const celebration = await strapi.db.query(CELEBRATION_UID).findOne({
         where: { documentId: purchase.celebrationDocumentId },
-        select: ['premiumUnlocked', 'premiumPaymentId'],
+        select: ['premiumUnlocked', 'premiumPaymentId', 'expiresAt'],
       });
       if (!celebration?.premiumUnlocked || !celebration?.premiumPaymentId) {
         throw new Error('Could not grant celebration access');
       }
       canonicalPaymentId = celebration.premiumPaymentId;
+      if (celebration.expiresAt) finalExpiresAt = celebration.expiresAt;
     }
 
     await strapi.db.query(PURCHASE_UID).update({
@@ -382,7 +405,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       unlocked: true,
       celebrationSlug: purchase.celebrationSlug,
       features: ['video', 'collage'],
-      expiresAt,
+      expiresAt: finalExpiresAt,
       amountPaise: purchase.amountPaise,
       currency: purchase.currency,
       duplicatePayment: Boolean(

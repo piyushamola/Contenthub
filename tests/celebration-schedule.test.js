@@ -117,19 +117,19 @@ test('Story checkout boundaries leave published updates alone and reject invalid
   }
 });
 
-test('a story without a trigger lasts 24 hours from publish, and a passed trigger cannot be published', () => {
+test('a story without a trigger lasts 7 days from publish, and a passed trigger cannot be published', () => {
   const publishedAt = '2026-10-06T12:00:00.000Z';
   assert.equal(
     storyTriggerExpiry({ triggerAt: null }, publishedAt, Date.parse(publishedAt)),
-    '2026-10-07T12:00:00.000Z',
+    '2026-10-13T12:00:00.000Z',
   );
   assert.equal(
     storyTriggerExpiry({ triggerAt: '2026-10-07T00:00:00.000Z' }, publishedAt, Date.parse(publishedAt)),
-    '2026-10-08T00:00:00.000Z',
+    '2026-10-14T00:00:00.000Z',
   );
   assert.equal(
     storyTriggerExpiry(
-      { triggerAt: '2026-10-05T00:00:00.000Z' },
+      { triggerAt: '2026-09-25T00:00:00.000Z' },
       publishedAt,
       Date.parse(publishedAt),
     ),

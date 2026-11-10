@@ -5,12 +5,23 @@ const { test } = require('node:test');
 const lifecycle = require('../src/api/premium-pricing/content-types/premium-pricing/lifecycles');
 
 const current = { indiaPriceRupees: 9, otherCountriesPriceUsd: 1, storyIndiaPriceRupees: 36, storyOtherCountriesPriceUsd: 5 };
-const originals = { indiaOriginalPriceRupees: 18.001, otherCountriesOriginalPriceUsd: '2.501', storyIndiaOriginalPriceRupees: 72.001, storyOtherCountriesOriginalPriceUsd: '10.001' };
+const optionalCurrent = { ukPriceGbp: 0.99, europePriceEur: 0.99, storyUkPriceGbp: 2.49, storyEuropePriceEur: 2.99 };
+const originals = {
+  indiaOriginalPriceRupees: 18.001,
+  otherCountriesOriginalPriceUsd: '2.501',
+  ukOriginalPriceGbp: 4.991,
+  europeOriginalPriceEur: '5.501',
+  storyIndiaOriginalPriceRupees: 72.001,
+  storyOtherCountriesOriginalPriceUsd: '10.001',
+  storyUkOriginalPriceGbp: 9.991,
+  storyEuropeOriginalPriceEur: '9.999',
+};
 
 for (const hook of ['beforeCreate', 'beforeUpdate', 'beforeUpdateMany']) {
   test(`${hook} preserves exact minor-unit prices and valid optional originals`, () => {
-    const data = { ...current, indiaPriceRupees: 0.29, otherCountriesPriceUsd: '1.99',
+    const data = { ...current, ...optionalCurrent, indiaPriceRupees: 0.29, otherCountriesPriceUsd: '1.99',
       indiaOriginalPriceRupees: 18, otherCountriesOriginalPriceUsd: '2.50',
+      ukOriginalPriceGbp: 4.99, europeOriginalPriceEur: '5.50',
       storyIndiaOriginalPriceRupees: null, note: 'Unrelated data stays intact' };
     const before = structuredClone(data);
     lifecycle[hook]({ params: { data } });
@@ -21,6 +32,15 @@ for (const hook of ['beforeCreate', 'beforeUpdate', 'beforeUpdateMany']) {
     for (const field of Object.keys(current)) {
       for (const value of [9.001, '1.999', 0, -1, null, true, {}, 'not-a-price', Infinity, Number.MAX_SAFE_INTEGER]) {
         const data = { ...current, ...originals, [field]: value };
+        const before = structuredClone(data);
+        assert.throws(() => lifecycle[hook]({ params: { data } }), error =>
+          error.name === 'ValidationError' && /two decimal places/i.test(error.message));
+        assert.deepEqual(data, before);
+      }
+    }
+    for (const field of Object.keys(optionalCurrent)) {
+      for (const value of [9.001, '1.999', 0, -1, true, {}, 'not-a-price', Infinity, Number.MAX_SAFE_INTEGER]) {
+        const data = { ...current, ...optionalCurrent, ...originals, [field]: value };
         const before = structuredClone(data);
         assert.throws(() => lifecycle[hook]({ params: { data } }), error =>
           error.name === 'ValidationError' && /two decimal places/i.test(error.message));

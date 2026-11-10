@@ -25,6 +25,24 @@ test('Strapi prices are converted from editable rupees and dollars to payment un
   assert.deepEqual(await pricing.currentPrices(), { INR: 900, USD: 100, originalINR: null, originalUSD: null });
   settings = { indiaPriceRupees: '18', otherCountriesPriceUsd: '5.50' };
   assert.deepEqual(await pricing.currentPrices(), { INR: 1800, USD: 550, originalINR: null, originalUSD: null });
+  settings = {
+    indiaPriceRupees: '18',
+    otherCountriesPriceUsd: '5.50',
+    ukPriceGbp: '3.99',
+    ukOriginalPriceGbp: '7.99',
+    europePriceEur: '4.50',
+    europeOriginalPriceEur: '9',
+  };
+  assert.deepEqual(await pricing.currentPrices(), {
+    INR: 1800,
+    USD: 550,
+    GBP: 399,
+    EUR: 450,
+    originalINR: null,
+    originalUSD: null,
+    originalGBP: 799,
+    originalEUR: 900,
+  });
   settings = { indiaPriceRupees: '18.001', otherCountriesPriceUsd: '5' };
   await assert.rejects(pricing.currentPrices(), /at most two decimal places/);
 });
@@ -171,6 +189,28 @@ test('new Razorpay orders use the saved price and existing orders retain theirs'
     assert.equal(international.amount, 500);
     assert.equal(international.currency, 'USD');
     assert.equal(providerOrders[2].amount, 500);
+
+    settings = {
+      indiaPriceRupees: '36',
+      otherCountriesPriceUsd: '5',
+      ukPriceGbp: '3.99',
+      ukOriginalPriceGbp: '7.99',
+      europePriceEur: '4.49',
+      europeOriginalPriceEur: '8.99',
+      indiaOriginalPriceRupees: '72',
+      otherCountriesOriginalPriceUsd: '10',
+    };
+    celebration.country = 'GB';
+    const ukQuote = await purchase.getAccess(celebration.customroute, 'US');
+    assert.equal(ukQuote.amountPaise, 399);
+    assert.equal(ukQuote.currency, 'GBP');
+    assert.equal(ukQuote.originalAmountPaise, 799);
+
+    celebration.country = 'DE';
+    const euQuote = await purchase.getAccess(celebration.customroute, 'US');
+    assert.equal(euQuote.amountPaise, 449);
+    assert.equal(euQuote.currency, 'EUR');
+    assert.equal(euQuote.originalAmountPaise, 899);
 
     for (const [index, country] of [null, 'India'].entries()) {
       celebration.country = country;

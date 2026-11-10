@@ -5,7 +5,7 @@
     "singularName": "premium-pricing",
     "pluralName": "premium-pricings",
     "displayName": "Premium pricing",
-    "description": "One price for India and one price for all other countries"
+    "description": "Configurable regional pricing for India (INR), UK (GBP), Eurozone (EUR), and all other countries (USD)"
   },
   "options": {
     "draftAndPublish": false
@@ -33,6 +33,26 @@
       "required": false,
       "min": 0.01
     },
+    "ukPriceGbp": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "ukOriginalPriceGbp": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "europePriceEur": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "europeOriginalPriceEur": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
     "storyIndiaPriceRupees": {
       "type": "decimal",
       "required": true,
@@ -51,6 +71,26 @@
       "default": 5
     },
     "storyOtherCountriesOriginalPriceUsd": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyUkPriceGbp": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyUkOriginalPriceGbp": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyEuropePriceEur": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyEuropeOriginalPriceEur": {
       "type": "decimal",
       "required": false,
       "min": 0.01

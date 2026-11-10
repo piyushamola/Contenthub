@@ -45,7 +45,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
   async unpublishCelebration(documentId) {
     const published = await strapi.db.query(HAPPY_BIRTHDAY_UID).findOne({
       where: { documentId, publishedAt: { $notNull: true } },
-      select: ['documentId', 'customroute', 'journeyType', 'storyFirstPublishedAt', 'createdAt', 'expiresAt', 'triggerAt'],
+      select: ['documentId', 'customroute', 'journeyType', 'storyFirstPublishedAt', 'premiumUnlocked', 'createdAt', 'expiresAt', 'triggerAt'],
     });
     if (!published) return null;
 

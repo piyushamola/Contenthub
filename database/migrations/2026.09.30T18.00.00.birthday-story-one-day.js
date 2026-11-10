@@ -15,7 +15,7 @@ module.exports = {
     for (const entry of entries) {
       const firstPublishedAt = new Date(entry.story_first_published_at).getTime();
       if (!Number.isFinite(firstPublishedAt)) continue;
-      const expiry = firstPublishedAt + 24 * 60 * 60 * 1000;
+      const expiry = firstPublishedAt + 7 * 24 * 60 * 60 * 1000;
       const previousExpiry = entry.expires_at == null
         ? NaN
         : new Date(entry.expires_at).getTime();

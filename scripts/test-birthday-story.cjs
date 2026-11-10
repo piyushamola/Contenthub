@@ -347,8 +347,8 @@ let app;
   const firstPublication = await service.draft(draft.documentId);
   assert.equal(
     Date.parse(originalExpiry) - Date.parse(firstPublication.storyFirstPublishedAt),
-    24 * 60 * 60 * 1000,
-    'Birthday Story uses the same 24-hour lifetime as standard celebrations',
+    7 * 24 * 60 * 60 * 1000,
+    'Birthday Story stays live for 7 days from publication',
   );
   const again = await payments.grantCapturedPurchase(purchase, payment);
   assert.equal(again.expiresAt, originalExpiry);
@@ -744,7 +744,7 @@ let app;
   const expiredBefore = (await service.read(draft.documentId, user.id)).expiresAt;
   await migration.up(app.db.connection);
   const migrated = await service.read(legacy.documentId, user.id);
-  assert.equal(Date.parse(migrated.expiresAt) - Date.parse(firstPublishedAt), 86400000);
+  assert.equal(Date.parse(migrated.expiresAt) - Date.parse(firstPublishedAt), 7 * 86400000);
   assert.equal((await service.read(draft.documentId, user.id)).expiresAt, expiredBefore);
   assert.equal((await service.read(other.documentId, user.id)).expiresAt, null);
   assert.equal((await payments.getAccess('standard-regression')).expiresAt, standardExpiryBefore);

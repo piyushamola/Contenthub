@@ -5,18 +5,39 @@ const assert = require('node:assert/strict');
 const { celebrationExpiresAt, celebrationWindowEndMs } = require('../src/api/happy-birthday/utils/celebration-expiry');
 const celebrationFactory = require('../src/api/happy-birthday/services/happy-birthday');
 
-test('legacy celebrations last 24 hours and explicit expiry is preserved', () => {
+test('legacy celebrations last 24 hours, paid celebrations last 7 days, and explicit expiry is preserved', () => {
   assert.equal(celebrationExpiresAt({ createdAt: '2026-01-01T12:00:00.000Z' }), '2026-01-02T12:00:00.000Z');
+  assert.equal(celebrationExpiresAt({ createdAt: '2026-01-01T12:00:00.000Z', premiumUnlocked: true }), '2026-01-08T12:00:00.000Z');
+  assert.equal(celebrationExpiresAt({ createdAt: '2026-01-01T12:00:00.000Z', journeyType: 'story' }), '2026-01-08T12:00:00.000Z');
   assert.equal(celebrationExpiresAt({ createdAt: '2026-01-01', expiresAt: '2026-01-01T15:00:00.000Z' }), '2026-01-01T15:00:00.000Z');
   assert.equal(celebrationExpiresAt({ createdAt: 'invalid' }), null);
 });
 
-test('the hourly cleanup waits 24 hours after the trigger time', () => {
+test('the hourly cleanup waits 24 hours for free Standard and 7 days for paid celebrations after trigger time', () => {
   const createdAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const triggerAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const windowEnd = celebrationWindowEndMs({ createdAt, expiresAt: createdAt, triggerAt });
   assert.equal(windowEnd - Date.parse(triggerAt), 24 * 60 * 60 * 1000);
   assert.ok(windowEnd > Date.now());
+
+  const triggerTwoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const paidPremiumEnd = celebrationWindowEndMs({
+    createdAt,
+    expiresAt: createdAt,
+    triggerAt: triggerTwoDaysAgo,
+    premiumUnlocked: true,
+  });
+  assert.equal(paidPremiumEnd - Date.parse(triggerTwoDaysAgo), 7 * 24 * 60 * 60 * 1000);
+  assert.ok(paidPremiumEnd > Date.now());
+
+  const paidStoryEnd = celebrationWindowEndMs({
+    createdAt,
+    expiresAt: createdAt,
+    triggerAt: triggerTwoDaysAgo,
+    journeyType: 'story',
+  });
+  assert.equal(paidStoryEnd - Date.parse(triggerTwoDaysAgo), 7 * 24 * 60 * 60 * 1000);
+  assert.ok(paidStoryEnd > Date.now());
 });
 
 test('expiry cleanup keeps a scheduled celebration published until its trigger window ends', async () => {

@@ -1,6 +1,6 @@
 'use strict';
 
-const { CELEBRATION_DURATION_MS } = require('./celebration-expiry');
+const { CELEBRATION_DURATION_MS, PAID_CELEBRATION_DURATION_MS } = require('./celebration-expiry');
 
 const MIN_LEAD_MS = 60 * 1000;
 const MAX_LEAD_MS = 366 * 24 * 60 * 60 * 1000;
@@ -268,10 +268,10 @@ function assertStoryCheckoutSchedule(entry, now = Date.now()) {
 function storyTriggerExpiry(entry, publishedAt, now = Date.now()) {
   const triggerMs = Date.parse(entry?.triggerAt || '');
   if (!Number.isFinite(triggerMs)) {
-    return new Date(Date.parse(publishedAt) + CELEBRATION_DURATION_MS).toISOString();
+    return new Date(Date.parse(publishedAt) + PAID_CELEBRATION_DURATION_MS).toISOString();
   }
-  if (triggerMs + CELEBRATION_DURATION_MS <= now) return null;
-  return new Date(triggerMs + CELEBRATION_DURATION_MS).toISOString();
+  if (triggerMs + PAID_CELEBRATION_DURATION_MS <= now) return null;
+  return new Date(triggerMs + PAID_CELEBRATION_DURATION_MS).toISOString();
 }
 
 module.exports = {
