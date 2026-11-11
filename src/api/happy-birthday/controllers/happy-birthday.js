@@ -82,6 +82,9 @@ async function findDashboardPage(strapi, where, { page, pageSize }) {
 
 function serializeForDashboard(entry) {
   if (!entry) return null;
+  const engagement = entry.storyAssetMetadata?.__engagement && typeof entry.storyAssetMetadata.__engagement === 'object'
+    ? entry.storyAssetMetadata.__engagement
+    : {};
   return {
     id: entry.id,
     documentId: entry.documentId,
@@ -109,6 +112,8 @@ function serializeForDashboard(entry) {
     journeyType: entry.journeyType || 'standard',
     storyState: entry.journeyType === 'story' ? (entry.storyExpiredAt || (entry.storyFirstPublishedAt && Date.parse(entry.expiresAt) <= Date.now()) ? 'expired' : entry.storyFirstPublishedAt ? 'active' : 'draft') : null,
     hasUnpublishedChanges: entry.storyRevision !== entry.storyPublishedRevision,
+    firstOpenedAt: typeof engagement.firstOpenedAt === 'string' ? engagement.firstOpenedAt : null,
+    openCount: Number.isInteger(engagement.openCount) && engagement.openCount > 0 ? engagement.openCount : 0,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     images: Array.isArray(entry.images) ? entry.images : [],

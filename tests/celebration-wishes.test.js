@@ -162,3 +162,54 @@ test('internal policy requires API tokens and controller reports save failures w
     if (status === 500) assert.equal(ctx.body.message, 'Could not save your wish. Please try again.');
   }
 });
+
+test('reactions with a mandatory name are persisted with optional comments and recordOpen tracks first open', async () => {
+  const { service, rows } = fixture({
+    journeyType: 'story',
+    premiumUnlocked: true,
+    hostemail: 'host@example.test',
+    hostname: 'Sam',
+    personname: 'Aanya',
+  });
+
+  const firstOpen = await service.recordOpen('sam-birthday');
+  assert.equal(firstOpen.opened, true);
+  assert.equal(firstOpen.isFirstOpen, true);
+  assert.equal(firstOpen.openCount, 1);
+  assert.ok(Number.isFinite(Date.parse(firstOpen.firstOpenedAt)));
+
+  const secondOpen = await service.recordOpen('sam-birthday');
+  assert.equal(secondOpen.opened, true);
+  assert.equal(secondOpen.isFirstOpen, false);
+  assert.equal(secondOpen.openCount, 2);
+  assert.equal(secondOpen.firstOpenedAt, firstOpen.firstOpenedAt);
+  assert.equal(rows()[0].storyAssetMetadata.__engagement.openCount, 2);
+  assert.equal(rows()[1].storyAssetMetadata.__engagement.openCount, 2);
+
+  // Reaction without extra comment uses the reaction label as the message.
+  const reactionOnly = await service.addWish('sam-birthday', {
+    name: 'Aanya',
+    reaction: '❤️ Loved it',
+    message: '',
+  });
+  assert.equal(reactionOnly.wish.name, 'Aanya');
+  assert.equal(reactionOnly.wish.reaction, '❤️ Loved it');
+  assert.equal(reactionOnly.wish.message, '❤️ Loved it');
+
+  // Reaction with a custom comment keeps both reaction and comment.
+  const reactionWithComment = await service.addWish('sam-birthday', {
+    name: 'Aanya',
+    reaction: '🥹 Made me cry',
+    message: 'Best birthday surprise ever, thank you!',
+  });
+  assert.equal(reactionWithComment.wish.name, 'Aanya');
+  assert.equal(reactionWithComment.wish.reaction, '🥹 Made me cry');
+  assert.equal(reactionWithComment.wish.message, 'Best birthday surprise ever, thank you!');
+  assert.equal(rows()[0].guestwishes.length, 3);
+
+  // Missing name is still rejected even when a reaction is supplied.
+  await assert.rejects(
+    service.addWish('sam-birthday', { name: '  ', reaction: '❤️ Loved it', message: '' }),
+    { status: 400 },
+  );
+});

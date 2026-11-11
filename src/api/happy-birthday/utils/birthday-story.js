@@ -13,6 +13,7 @@ const RESERVED = new Set([
   'dashboard',
   'delivery-policy',
   'faq',
+  'for',
   'forgot-password',
   'gallery',
   'gifts',
