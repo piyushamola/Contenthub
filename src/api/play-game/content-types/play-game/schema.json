@@ -1,0 +1,63 @@
+{
+  "kind": "collectionType",
+  "collectionName": "play_games",
+  "info": {
+    "singularName": "play-game",
+    "pluralName": "play-games",
+    "displayName": "Play game",
+    "description": "Isolated Play Together party and birthday mini-games with player scores"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "slug": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "minLength": 3
+    },
+    "gameType": {
+      "type": "enumeration",
+      "enum": [
+        "memory-quiz",
+        "birthday-wheel",
+        "most-likely-to"
+      ],
+      "required": true
+    },
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "recipientName": {
+      "type": "string",
+      "required": true
+    },
+    "creatorName": {
+      "type": "string",
+      "required": true
+    },
+    "creatorEmail": {
+      "type": "email",
+      "required": false
+    },
+    "config": {
+      "type": "json",
+      "required": true
+    },
+    "plays": {
+      "type": "json",
+      "required": false
+    },
+    "playCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

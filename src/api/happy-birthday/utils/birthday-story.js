@@ -20,6 +20,7 @@ const RESERVED = new Set([
   'login',
   'music',
   'opengraph-image',
+  'play',
   'preview',
   'pricing',
   'privacy',
