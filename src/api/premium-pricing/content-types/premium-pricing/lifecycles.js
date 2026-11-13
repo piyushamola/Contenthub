@@ -3,16 +3,25 @@
 const { errors } = require('@strapi/utils');
 
 const CURRENT_FIELDS = ['indiaPriceRupees', 'otherCountriesPriceUsd', 'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd'];
-const OPTIONAL_CURRENT_FIELDS = ['ukPriceGbp', 'europePriceEur', 'storyUkPriceGbp', 'storyEuropePriceEur'];
+const OPTIONAL_CURRENT_FIELDS = [
+  'ukPriceGbp',
+  'europePriceEur',
+  'pakistanPricePkr',
+  'storyUkPriceGbp',
+  'storyEuropePriceEur',
+  'storyPakistanPricePkr',
+];
 const ORIGINAL_FIELDS = [
   'indiaOriginalPriceRupees',
   'otherCountriesOriginalPriceUsd',
   'ukOriginalPriceGbp',
   'europeOriginalPriceEur',
+  'pakistanOriginalPricePkr',
   'storyIndiaOriginalPriceRupees',
   'storyOtherCountriesOriginalPriceUsd',
   'storyUkOriginalPriceGbp',
   'storyEuropeOriginalPriceEur',
+  'storyPakistanOriginalPricePkr',
 ];
 
 function usesMinorUnits(value) {

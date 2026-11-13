@@ -166,7 +166,7 @@ async function main() {
       providerCalls.push({ method: init.method || 'GET', endpoint });
       if (endpoint === '/orders' && init.method === 'POST') {
         const input = JSON.parse(init.body);
-        if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || !['INR', 'USD', 'GBP', 'EUR'].includes(input.currency)) throw new Error('Invalid mock provider order');
+        if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || !['INR', 'USD', 'GBP', 'EUR', 'PKR'].includes(input.currency)) throw new Error('Invalid mock provider order');
         const order = { ...input, id: `order_regression${crypto.randomBytes(8).toString('hex')}`, status: 'created' };
         orders.set(order.id, order);
         return order;
@@ -205,10 +205,10 @@ async function main() {
     if (route === '/pricing' && ['GET', 'PATCH'].includes(ctx.method)) {
       if (mode !== 'mock') { ctx.status = 409; ctx.body = { error: 'Pricing controls are available only in mock mode' }; return; }
       const fields = [
-        'indiaPriceRupees', 'otherCountriesPriceUsd', 'ukPriceGbp', 'europePriceEur',
-        'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd', 'storyUkPriceGbp', 'storyEuropePriceEur',
-        'indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'ukOriginalPriceGbp', 'europeOriginalPriceEur',
-        'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd', 'storyUkOriginalPriceGbp', 'storyEuropeOriginalPriceEur',
+        'indiaPriceRupees', 'otherCountriesPriceUsd', 'ukPriceGbp', 'europePriceEur', 'pakistanPricePkr',
+        'storyIndiaPriceRupees', 'storyOtherCountriesPriceUsd', 'storyUkPriceGbp', 'storyEuropePriceEur', 'storyPakistanPricePkr',
+        'indiaOriginalPriceRupees', 'otherCountriesOriginalPriceUsd', 'ukOriginalPriceGbp', 'europeOriginalPriceEur', 'pakistanOriginalPricePkr',
+        'storyIndiaOriginalPriceRupees', 'storyOtherCountriesOriginalPriceUsd', 'storyUkOriginalPriceGbp', 'storyEuropeOriginalPriceEur', 'storyPakistanOriginalPricePkr',
       ];
       let pricing = await app.db.query(PRICING_UID).findOne({});
       if (!pricing) { ctx.status = 404; ctx.body = { error: 'Regression pricing not found' }; return; }

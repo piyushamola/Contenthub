@@ -32,16 +32,20 @@ test('Strapi prices are converted from editable rupees and dollars to payment un
     ukOriginalPriceGbp: '7.99',
     europePriceEur: '4.50',
     europeOriginalPriceEur: '9',
+    pakistanPricePkr: '60',
+    pakistanOriginalPricePkr: '150',
   };
   assert.deepEqual(await pricing.currentPrices(), {
     INR: 1800,
     USD: 550,
     GBP: 399,
     EUR: 450,
+    PKR: 6000,
     originalINR: null,
     originalUSD: null,
     originalGBP: 799,
     originalEUR: 900,
+    originalPKR: 15000,
   });
   settings = { indiaPriceRupees: '18.001', otherCountriesPriceUsd: '5' };
   await assert.rejects(pricing.currentPrices(), /at most two decimal places/);
@@ -197,6 +201,8 @@ test('new Razorpay orders use the saved price and existing orders retain theirs'
       ukOriginalPriceGbp: '7.99',
       europePriceEur: '4.49',
       europeOriginalPriceEur: '8.99',
+      pakistanPricePkr: '60',
+      pakistanOriginalPricePkr: '150',
       indiaOriginalPriceRupees: '72',
       otherCountriesOriginalPriceUsd: '10',
     };
@@ -211,6 +217,12 @@ test('new Razorpay orders use the saved price and existing orders retain theirs'
     assert.equal(euQuote.amountPaise, 449);
     assert.equal(euQuote.currency, 'EUR');
     assert.equal(euQuote.originalAmountPaise, 899);
+
+    celebration.country = 'PK';
+    const pkQuote = await purchase.getAccess(celebration.customroute, 'US');
+    assert.equal(pkQuote.amountPaise, 6000);
+    assert.equal(pkQuote.currency, 'PKR');
+    assert.equal(pkQuote.originalAmountPaise, 15000);
 
     for (const [index, country] of [null, 'India'].entries()) {
       celebration.country = country;

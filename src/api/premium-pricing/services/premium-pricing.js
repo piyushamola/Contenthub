@@ -35,13 +35,29 @@ function optionalCurrentMinorUnits(value, label) {
   return toMinorUnits(value, label);
 }
 
-function withRegionalCurrencies(base, settings, { gbpField, gbpOriginalField, gbpLabel, eurField, eurOriginalField, eurLabel }) {
+function withRegionalCurrencies(
+  base,
+  settings,
+  {
+    gbpField,
+    gbpOriginalField,
+    gbpLabel,
+    eurField,
+    eurOriginalField,
+    eurLabel,
+    pkrField,
+    pkrOriginalField,
+    pkrLabel,
+  },
+) {
   const GBP = optionalCurrentMinorUnits(settings?.[gbpField], gbpLabel);
   const EUR = optionalCurrentMinorUnits(settings?.[eurField], eurLabel);
+  const PKR = optionalCurrentMinorUnits(settings?.[pkrField], pkrLabel);
   return {
     ...base,
     ...(GBP !== null ? { GBP, originalGBP: originalMinorUnits(settings?.[gbpOriginalField], GBP) } : {}),
     ...(EUR !== null ? { EUR, originalEUR: originalMinorUnits(settings?.[eurOriginalField], EUR) } : {}),
+    ...(PKR !== null ? { PKR, originalPKR: originalMinorUnits(settings?.[pkrOriginalField], PKR) } : {}),
   };
 }
 
@@ -57,6 +73,8 @@ module.exports = createCoreService(UID, ({ strapi }) => ({
         'storyUkOriginalPriceGbp',
         'storyEuropePriceEur',
         'storyEuropeOriginalPriceEur',
+        'storyPakistanPricePkr',
+        'storyPakistanOriginalPricePkr',
       ],
     });
     const INR = toMinorUnits(settings?.storyIndiaPriceRupees ?? 36, 'Story India price');
@@ -76,6 +94,9 @@ module.exports = createCoreService(UID, ({ strapi }) => ({
         eurField: 'storyEuropePriceEur',
         eurOriginalField: 'storyEuropeOriginalPriceEur',
         eurLabel: 'Story Europe price',
+        pkrField: 'storyPakistanPricePkr',
+        pkrOriginalField: 'storyPakistanOriginalPricePkr',
+        pkrLabel: 'Story Pakistan price',
       },
     );
   },
@@ -90,6 +111,8 @@ module.exports = createCoreService(UID, ({ strapi }) => ({
         'ukOriginalPriceGbp',
         'europePriceEur',
         'europeOriginalPriceEur',
+        'pakistanPricePkr',
+        'pakistanOriginalPricePkr',
       ],
     });
     // The old prices stay in effect until the singleton is saved for the
@@ -112,6 +135,9 @@ module.exports = createCoreService(UID, ({ strapi }) => ({
         eurField: 'europePriceEur',
         eurOriginalField: 'europeOriginalPriceEur',
         eurLabel: 'Europe price',
+        pkrField: 'pakistanPricePkr',
+        pkrOriginalField: 'pakistanOriginalPricePkr',
+        pkrLabel: 'Pakistan price',
       },
     );
   },

@@ -5,16 +5,25 @@ const { test } = require('node:test');
 const lifecycle = require('../src/api/premium-pricing/content-types/premium-pricing/lifecycles');
 
 const current = { indiaPriceRupees: 9, otherCountriesPriceUsd: 1, storyIndiaPriceRupees: 36, storyOtherCountriesPriceUsd: 5 };
-const optionalCurrent = { ukPriceGbp: 0.99, europePriceEur: 0.99, storyUkPriceGbp: 2.49, storyEuropePriceEur: 2.99 };
+const optionalCurrent = {
+  ukPriceGbp: 0.99,
+  europePriceEur: 0.99,
+  pakistanPricePkr: 60,
+  storyUkPriceGbp: 2.49,
+  storyEuropePriceEur: 2.99,
+  storyPakistanPricePkr: 150,
+};
 const originals = {
   indiaOriginalPriceRupees: 18.001,
   otherCountriesOriginalPriceUsd: '2.501',
   ukOriginalPriceGbp: 4.991,
   europeOriginalPriceEur: '5.501',
+  pakistanOriginalPricePkr: 150.001,
   storyIndiaOriginalPriceRupees: 72.001,
   storyOtherCountriesOriginalPriceUsd: '10.001',
   storyUkOriginalPriceGbp: 9.991,
   storyEuropeOriginalPriceEur: '9.999',
+  storyPakistanOriginalPricePkr: '350.999',
 };
 
 for (const hook of ['beforeCreate', 'beforeUpdate', 'beforeUpdateMany']) {

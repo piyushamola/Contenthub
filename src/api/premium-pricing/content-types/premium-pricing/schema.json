@@ -5,7 +5,7 @@
     "singularName": "premium-pricing",
     "pluralName": "premium-pricings",
     "displayName": "Premium pricing",
-    "description": "Configurable regional pricing for India (INR), UK (GBP), Eurozone (EUR), and all other countries (USD)"
+    "description": "Configurable regional pricing for India (INR), Pakistan (PKR), UK (GBP), Eurozone (EUR), and all other countries (USD)"
   },
   "options": {
     "draftAndPublish": false
@@ -53,6 +53,16 @@
       "required": false,
       "min": 0.01
     },
+    "pakistanPricePkr": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "pakistanOriginalPricePkr": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
     "storyIndiaPriceRupees": {
       "type": "decimal",
       "required": true,
@@ -91,6 +101,16 @@
       "min": 0.01
     },
     "storyEuropeOriginalPriceEur": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyPakistanPricePkr": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyPakistanOriginalPricePkr": {
       "type": "decimal",
       "required": false,
       "min": 0.01
