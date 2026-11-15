@@ -9,6 +9,7 @@ const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
 const PRICING_UID = 'api::premium-pricing.premium-pricing';
 const { celebrationExpiresAt, paidCelebrationExpiresAt } = require('../../happy-birthday/utils/celebration-expiry');
 const { assertStoryCheckoutSchedule } = require('../../happy-birthday/utils/celebration-schedule');
+const { withCelebrationLock } = require('../../happy-birthday/utils/celebration-lock');
 const DEMO_SLUGS = new Set(
   (process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || 'elena,matt,mike')
     .split(',')
@@ -22,7 +23,7 @@ function safeMessage(error) {
 }
 
 const EUROZONE_COUNTRIES = new Set([
-  'AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR',
+  'AT', 'BE', 'BG', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR',
   'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK',
 ]);
 
@@ -295,6 +296,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       } });
       return result;
     }
+    return withCelebrationLock(strapi, purchase.celebrationDocumentId, async () => {
     const purchasedAt = toIsoFromUnix(payment.created_at);
     const celebrationBeforeGrant = await strapi.db.query(CELEBRATION_UID).findOne({
       where: { documentId: purchase.celebrationDocumentId },
@@ -413,6 +415,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
         canonicalPaymentId && canonicalPaymentId !== payment.id,
       ),
     };
+    });
   },
 
   async reconcileCapturedPurchase(purchase, paymentId) {
@@ -526,6 +529,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       });
       return { refunded: true, partial: true, entitlementRevoked: false };
     }
+    return withCelebrationLock(strapi, purchase.celebrationDocumentId, async () => {
     await strapi.db.query(PURCHASE_UID).update({
       where: { purchaseId: purchase.purchaseId },
       data: { status: 'refunded', providerStatus: 'refunded' },
@@ -552,6 +556,7 @@ module.exports = createCoreService(PURCHASE_UID, ({ strapi }) => ({
       await strapi.service(CELEBRATION_UID).unpublishCelebration(purchase.celebrationDocumentId);
     }
     return { refunded: true, entitlementRevoked: true };
+    });
   },
 
   async processWebhook({ eventId, event }) {

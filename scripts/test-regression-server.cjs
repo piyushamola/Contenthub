@@ -26,7 +26,8 @@ async function main() {
   child.stderr.on('data', capture);
   try {
     let ready;
-    const deadline = Date.now() + 90_000;
+    // Startup now includes a fresh isolated admin build as well as CMS boot.
+    const deadline = Date.now() + 120_000;
     while (!ready && Date.now() < deadline) {
       if (child.exitCode !== null) throw new Error(`Server exited before readiness: ${logs}`);
       try { ready = JSON.parse(await fs.readFile(readyFile, 'utf8')); } catch (error) {
@@ -38,6 +39,20 @@ async function main() {
     assert.equal(ready.paymentMode, 'mock');
     assert.equal(Object.hasOwn(ready.frontendEnv, 'RAZORPAY_KEY_SECRET'), false);
     assert.equal((await fs.stat(readyFile)).mode & 0o777, 0o600);
+    const adminLogin = await fetch(ready.cmsUrl + '/admin/auth/login', { signal: AbortSignal.timeout(10_000) });
+    assert.equal(adminLogin.status, 200, 'The real Strapi admin login serves its built HTML');
+    assert.match(adminLogin.headers.get('content-type'), /text\/html/);
+    const adminHtml = await adminLogin.text();
+    assert.match(adminHtml, /id=["']strapi["']/);
+    const adminScripts = [...adminHtml.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g)].map(match => new URL(match[1], ready.cmsUrl + '/admin/'));
+    assert.ok(adminScripts.length > 0, 'Admin HTML references a real JavaScript bundle');
+    for (const script of adminScripts) {
+      assert.equal(script.origin, ready.cmsUrl, 'The disposable admin uses its own CMS origin');
+      const response = await fetch(script, { signal: AbortSignal.timeout(10_000) });
+      assert.equal(response.status, 200, 'The admin entry bundle is served instead of a missing-build fallback');
+      assert.match(response.headers.get('content-type'), /(?:java|ecma)script/);
+      assert.ok((await response.text()).length > 0);
+    }
     async function request(route, { method = 'GET', data, control = false, token } = {}) {
       const response = await fetch(ready.cmsUrl + route, {
         method, headers: {
@@ -64,6 +79,26 @@ async function main() {
       assert.equal(login.status, 200);
     }
     const token = ready.frontendEnv.AUTHORIZATION_TOKEN;
+    // Next reads blogs with its internal CMS token. Seeding content must not
+    // grant anonymous access to the generic CMS collection or its drafts.
+    assert.equal((await request('/api/blog-articles?status=published')).status, 403);
+    assert.equal((await request('/api/blog-articles?status=draft')).status, 403);
+    const publishedBlogs = await request('/api/blog-articles?status=published', { token });
+    assert.equal(publishedBlogs.status, 200);
+    assert.deepEqual(publishedBlogs.data.data.map(article => article.slug), ['regression-published-birthday-guide']);
+    assert.equal(publishedBlogs.data.data[0].title, 'A birthday guide from the disposable CMS');
+    assert.ok(publishedBlogs.data.data[0].publishedAt);
+    const publishedBlog = await request('/api/blog-articles?status=published&filters[slug][$eq]=regression-published-birthday-guide', { token });
+    assert.equal(publishedBlog.status, 200);
+    assert.equal(publishedBlog.data.data.length, 1);
+    assert.match(publishedBlog.data.data[0].content, /This guide comes from the disposable CMS/);
+    const unpublishedBlog = await request('/api/blog-articles?status=published&filters[slug][$eq]=regression-draft-only-birthday-guide', { token });
+    assert.equal(unpublishedBlog.status, 200);
+    assert.deepEqual(unpublishedBlog.data.data, []);
+    const privateDraft = await request('/api/blog-articles?status=draft&filters[slug][$eq]=regression-draft-only-birthday-guide', { token });
+    assert.equal(privateDraft.status, 200);
+    assert.equal(privateDraft.data.data.length, 1);
+    assert.equal(privateDraft.data.data[0].publishedAt, null);
     assert.deepEqual((await request('/api/celebration-payments/pricing', { token })).data, { INR: 900, USD: 100, originalINR: null, originalUSD: null });
     assert.equal((await request('/__regression/pricing')).status, 401);
     assert.equal((await request('/__regression/pricing', { method: 'PATCH', data: { indiaPriceRupees: 1 } })).status, 401);
@@ -133,7 +168,7 @@ async function main() {
     assert.equal(afterExpiry.data.rows[0].publishedAt, null);
     const outbox = await request(`/__regression/outbox?email=${encodeURIComponent(ready.users.creator.email)}`, { control: true });
     assert.ok(outbox.data.messages.length > 0);
-    console.log('PASS: disposable server, confirmed users, guarded controls, test-key rejection, real HTTP create/payment/refund/expiry and captured email.');
+    console.log('PASS: disposable server and built admin HTML/JavaScript, confirmed users, guarded controls, published/draft blog HTTP boundaries, test-key rejection, real HTTP create/payment/refund/expiry and captured email.');
   } catch (error) {
     console.error(logs);
     throw error;

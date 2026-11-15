@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { celebrationExpiresAt, celebrationWindowEndMs } = require('../src/api/happy-birthday/utils/celebration-expiry');
 const celebrationFactory = require('../src/api/happy-birthday/services/happy-birthday');
+const { celebrationLockFixture } = require('./helpers/celebration-lock-fixture.cjs');
 
 test('legacy celebrations last 24 hours, paid celebrations last 7 days, and explicit expiry is preserved', () => {
   assert.equal(celebrationExpiresAt({ createdAt: '2026-01-01T12:00:00.000Z' }), '2026-01-02T12:00:00.000Z');
@@ -48,7 +49,7 @@ test('expiry cleanup keeps a scheduled celebration published until its trigger w
   const service = celebrationFactory({ strapi: {
     contentType: (uid) => ({ uid }),
     log: { info() {}, error() {} },
-    db: { query: () => ({
+    db: celebrationLockFixture({ query: () => ({
       findMany: async () => [
         { documentId: 'waiting', expiresAt: createdLongAgo },
         { documentId: 'finished', expiresAt: createdLongAgo },
@@ -59,7 +60,7 @@ test('expiry cleanup keeps a scheduled celebration published until its trigger w
         expiresAt: createdLongAgo,
         triggerAt: where.documentId === 'waiting' ? triggerSoon : triggerAlreadyOver,
       }),
-    }) },
+    }) }),
   } });
   service.unpublishCelebration = async (documentId) => {
     removed.push(documentId);
@@ -78,7 +79,7 @@ test('expiry cleanup rechecks active records, deduplicates drafts and keeps proc
   const service = celebrationFactory({ strapi: {
     contentType: (uid) => ({ uid }),
     log: { info() {}, error() {} },
-    db: { query: () => ({
+    db: celebrationLockFixture({ query: () => ({
       findMany: async ({ where }) => {
         assert.deepEqual(where.customroute.$notIn, ['elena', 'matt', 'mike']);
         assert.deepEqual(where.publishedAt, { $notNull: true });
@@ -88,7 +89,7 @@ test('expiry cleanup rechecks active records, deduplicates drafts and keeps proc
         documentId: where.documentId,
         expiresAt: where.documentId === 'renewed' ? new Date(Date.now() + 60_000).toISOString() : expired,
       },
-    }) },
+    }) }),
   } });
   service.unpublishCelebration = async (documentId) => {
     if (documentId === 'broken') throw new Error('Database unavailable for this item');
@@ -104,6 +105,25 @@ test('expiry cleanup rechecks active records, deduplicates drafts and keeps proc
   assert.equal(result.failed, 1);
 });
 
+test('expiry cleanup observes an upgrade completed while it waited for the document lock', async () => {
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  const row = { documentId: 'upgraded', expiresAt: expired };
+  let removed = false;
+  const service = celebrationFactory({ strapi: {
+    contentType: uid => ({ uid }), log: { info() {}, error() {} },
+    db: celebrationLockFixture({ query: () => ({
+      findMany: async () => [{ documentId: row.documentId, expiresAt: expired }],
+      findOne: async () => row,
+    }) }, { onLock: async () => { row.expiresAt = new Date(Date.now() + 86_400_000).toISOString(); } }),
+  } });
+  service.unpublishCelebration = async () => { removed = true; return { documentId: row.documentId }; };
+  const result = await service.unpublishExpired();
+  assert.equal(removed, false);
+  assert.equal(result.skippedActive, 1);
+  assert.equal(result.unpublished, 0);
+  assert.equal(result.failed, 0);
+});
+
 
 test('public removal persists the original one-year deadline and keeps media without restarting on removal', async () => {
   const data = {
@@ -114,13 +134,13 @@ test('public removal persists the original one-year deadline and keeps media wit
   let published = true;
   const service = celebrationFactory({ strapi: {
     contentType: uid => ({ uid }),
-    db: { query: () => ({
+    db: celebrationLockFixture({ query: () => ({
       findOne: async () => published ? data : null,
       updateMany: async ({ where, data: patch }) => {
         if (where.journeyType) return { count: 0 };
         Object.assign(data, patch); return { count: 1 };
       },
-    }) },
+    }) }),
     documents: () => ({ unpublish: async () => { published = false; return { entries: [data] }; } }),
   } });
   assert.deepEqual(await service.unpublishCelebration('owned'), { documentId: 'owned', customroute: 'owned' });

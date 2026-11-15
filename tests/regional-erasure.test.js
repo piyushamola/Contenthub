@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { canPermanentlyDelete, eraseOwnedCelebration } = require('../src/privacy/regional-celebration-erasure');
+const { celebrationLockFixture } = require('./helpers/celebration-lock-fixture.cjs');
 test('non-admin regional erasure rejects India, unknown and malformed locations before reading celebrations or mutating data', async () => {
   const strapi = { db: { query(uid) {
     assert.equal(uid, 'plugin::users-permissions.user', 'Only the acting account may be read before the country gate');
@@ -23,11 +24,11 @@ test('a failed media provider reports queued cleanup without claiming permanent 
   let deleted = false;
   const strapi = {
     log: { error() {} },
-    db: { query: uid => ({
-      findMany: async () => [entry],
+    db: celebrationLockFixture({ query: uid => ({
+      findMany: async () => uid === 'plugin::upload.file' ? [] : [entry],
       findOne: async () => uid === 'plugin::users-permissions.user' ? { id: 1, role: { type: 'authenticated' } } : uid === 'plugin::upload.file' ? { id: 10, related: [] } : entry,
       updateMany: async ({ data }) => { Object.assign(entry, data); return { count: 1 }; },
-    }) },
+    }) }),
     service: () => ({ unpublishCelebration: async () => {} }),
     plugin: () => ({ service: () => ({ remove: async () => { throw new Error('Provider down'); } }) }),
     documents: () => ({ delete: async () => { deleted = true; } }),
@@ -42,7 +43,7 @@ function adminFixture({ role = 'admin', blocked = false, ownerId = 99, slug = 's
   const removed = [];
   let unpublished = false;
   const strapi = {
-    db: { query: uid => ({
+    db: celebrationLockFixture({ query: uid => ({
       findOne: async ({ where }) => {
         if (uid === 'plugin::users-permissions.user') return where.id === actor.id ? actor : null;
         if (uid === 'plugin::upload.file') return { id: 10, related: [] };
@@ -50,9 +51,9 @@ function adminFixture({ role = 'admin', blocked = false, ownerId = 99, slug = 's
           (!Object.hasOwn(where, 'owner') || row.owner?.id === where.owner) &&
           (!Object.hasOwn(where, 'publishedAt') || row.publishedAt === where.publishedAt)) || null;
       },
-      findMany: async () => rows,
+      findMany: async () => uid === 'plugin::upload.file' ? [] : rows,
       updateMany: async ({ data }) => { if (uid === 'api::happy-birthday.happy-birthday') rows.forEach(row => Object.assign(row, data)); return { count: 1 }; },
-    }) },
+    }) }),
     service: () => ({ unpublishCelebration: async () => { unpublished = true; } }),
     plugin: () => ({ service: () => ({ remove: async file => { removed.push(file.id); } }) }),
     documents: () => ({ delete: async () => { rows.length = 0; } }),

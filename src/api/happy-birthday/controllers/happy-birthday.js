@@ -10,6 +10,7 @@ const isServerToken = require('../policies/story-server');
 const { isInternalStoryDraftLink } = require('../utils/birthday-story');
 const { presentSchedule, resolveTrigger } = require('../utils/celebration-schedule');
 const { eraseOwnedCelebration } = require('../../../privacy/regional-celebration-erasure');
+const { withCelebrationLock } = require('../utils/celebration-lock');
 
 function applyTriggerTime(data) {
   if (!data || typeof data !== 'object') return null;
@@ -129,6 +130,7 @@ function serializeForDashboard(entry) {
 }
 
 async function setCelebrationStatus(strapi, documentId, celebrationStatus) {
+  return withCelebrationLock(strapi, documentId, async () => {
   // Strapi keeps a separate draft row alongside the published one for every
   // document (even ones created directly as published) — the Strapi admin
   // panel's Content Manager shows the DRAFT row by default. Updating only
@@ -145,6 +147,7 @@ async function setCelebrationStatus(strapi, documentId, celebrationStatus) {
   return strapi.db.query(UID).findOne({
     where: { documentId, publishedAt: { $notNull: true } },
     populate: DASHBOARD_POPULATE,
+  });
   });
 }
 
@@ -164,6 +167,7 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
   },
   async create(ctx) {
     const data = ctx.request.body?.data || {};
+    if (!isServerToken(ctx) && Object.keys(data).some(key => key.startsWith('standardEdit') || key === 'standardRevision')) return ctx.forbidden('Use the celebration dashboard editor');
     if (!isServerToken(ctx) && ['erasureRequestedAt', 'retentionExpiresAt'].some(key => Object.hasOwn(data, key))) return ctx.forbidden('Retention fields are managed by the server');
     if (!isServerToken(ctx) && Object.keys(data).some((key) => key.startsWith('story') || key === 'journeyType')) return ctx.forbidden('Use the Birthday Story creator');
     const triggerError = applyTriggerTime(data);
@@ -179,6 +183,7 @@ module.exports = createCoreController(UID, ({ strapi }) => ({
     }
   },
   async update(ctx) {
+    if (!isServerToken(ctx)) return ctx.forbidden('Use the celebration dashboard editor');
     const pending = await strapi.db.query(UID).findOne({ where: { documentId: ctx.params.id, erasureRequestedAt: { $notNull: true } } });
     if (pending) return ctx.conflict('Deletion is in progress');
     const data = ctx.request.body?.data || {};

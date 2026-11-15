@@ -295,7 +295,7 @@ let app;
   await assert.rejects(() => service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: '2026-02-30T12:00', editorStep: 7 }), /valid date and time/);
   assert.deepEqual(await service.read(draft.documentId, user.id), savedBeforeInvalidTime, 'Invalid wall times cannot partly change content, chapter or media');
   const checkoutInput = { slug: content.slug, purchaseId: crypto.randomUUID(), country: 'IN', ownerId: user.id };
-  await assert.rejects(() => payments.createOrder(checkoutInput), /Start after payment/);
+  await assert.rejects(() => payments.createOrder(checkoutInput), /clear the scheduled time/);
   assert.equal(await app.db.query('api::celebration-purchase.celebration-purchase').count({ where: { celebrationDocumentId: draft.documentId } }), 0);
   const futureOpeningTime = formatLocal(new Date(Date.now() + 3_600_000).toISOString(), 'Asia/Kolkata');
   draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: futureOpeningTime, editorStep: 0 });
@@ -322,7 +322,7 @@ let app;
   assert.equal(order.currency, 'INR');
   // An already-created provider order must not bypass the schedule guard.
   draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: oldOpeningTime });
-  await assert.rejects(() => payments.createOrder(checkoutInput), /Start after payment/);
+  await assert.rejects(() => payments.createOrder(checkoutInput), /clear the scheduled time/);
   draft = await service.save(draft.documentId, user.id, content, draft.revision, { triggerLocal: '' });
   const retry = await payments.createOrder({
     slug: content.slug,

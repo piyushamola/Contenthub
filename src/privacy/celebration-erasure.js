@@ -2,6 +2,8 @@
 const UID = 'api::happy-birthday.happy-birthday';
 const PURCHASE = 'api::celebration-purchase.celebration-purchase';
 const { celebrationWindowEndMs } = require('../api/happy-birthday/utils/celebration-expiry');
+const { uploadPrefix } = require('../api/happy-birthday/utils/standard-edit');
+const { withCelebrationLock } = require('../api/happy-birthday/utils/celebration-lock');
 const DEMOS = new Set(['elena', 'matt', 'mike', ...(process.env.BIRTHDAY_EXPIRY_EXCLUDED_ROUTES || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean)]);
 // Add a calendar year in UTC, clamping leap day to 28 February.
 function retentionDate(anchor = Date.now()) {
@@ -24,14 +26,28 @@ function celebrationRetentionDate(celebration) {
 }
 
 async function eraseCelebration(strapi, documentId, { allowDemo = false } = {}) {
-  const rows = await strapi.db.query(UID).findMany({ where: { documentId }, populate: { images: true, storyAssets: true } });
+  const snapshot = await withCelebrationLock(strapi, documentId, async () => {
+  const rows = await strapi.db.query(UID).findMany({ where: { documentId }, populate: { owner: true, images: true, storyAssets: true, standardEditAssets: true } });
   if (!rows.length) return null;
   if (!allowDemo && rows.some(row => DEMOS.has(String(row.customroute).toLowerCase()))) throw new Error('Demo celebrations cannot be erased here');
   const customroute = rows[0].customroute;
   const rowIds = new Set(rows.map(row => row.id));
-  const mediaIds = new Set(rows.flatMap(row => [...(row.images || []), ...(row.storyAssets || [])]).map(file => file.id));
+  const mediaIds = new Set(rows.flatMap(row => [...(row.images || []), ...(row.storyAssets || []), ...(row.standardEditAssets || [])]).map(file => file.id));
+  for (const row of rows) for (const id of row.standardEditCleanupIds || []) if (Number.isSafeInteger(id) && id > 0) mediaIds.add(id);
+  // Include an upload that succeeded immediately before its attach request was
+  // interrupted. Its opaque prefix binds it to this document and owner.
+  if (rows[0].owner?.id) {
+    const uploads = await strapi.db.query('plugin::upload.file').findMany({ where: { name: { $startsWith: uploadPrefix(documentId, rows[0].owner.id) } }, select: ['id'] });
+    for (const file of uploads) mediaIds.add(file.id);
+  }
   // This marker keeps a failed provider removal retryable and blocks new checkout/editing.
   await strapi.db.query(UID).updateMany({ where: { documentId }, data: { erasureRequestedAt: new Date().toISOString() } });
+  return { customroute, rowIds, mediaIds };
+  });
+  if (!snapshot) return null;
+  const { customroute, rowIds, mediaIds } = snapshot;
+  // Commit the erasure marker before provider work so a failed unpublish or
+  // storage removal remains retryable. New edits/attaches now fail closed.
   await strapi.service(UID).unpublishCelebration(documentId);
   // Financial records survive; their user-generated Story payload does not.
   await strapi.db.query(PURCHASE).updateMany({ where: { celebrationDocumentId: documentId }, data: { storySnapshot: null } });

@@ -7,6 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const https = require('node:https');
 const { once } = require('node:events');
+const { spawn } = require('node:child_process');
 
 function argumentsFrom(argv) {
   const allowed = new Set(['port', 'frontend-origin', 'ready-file', 'payments', 'tls-key', 'tls-cert']);
@@ -24,17 +25,61 @@ function argumentsFrom(argv) {
 const UID = 'api::happy-birthday.happy-birthday';
 const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const PRICING_UID = 'api::premium-pricing.premium-pricing';
+const BLOG_UID = 'api::blog-article.blog-article';
 let app;
 let secureServer;
 let temporary;
 let readyPath;
 let readyPublished = false;
 let stopping;
+let adminBuild;
+
+async function prepareApplication(root, applicationRoot) {
+  await fs.mkdir(applicationRoot);
+  // Build the real admin/plugin UI without reading the checkout's .env or
+  // replacing its build, generated runtime, source files or Vite cache.
+  for (const name of ['src', 'config', 'data', 'package.json']) {
+    await fs.cp(path.join(root, name), path.join(applicationRoot, name), { recursive: true });
+  }
+  const dependencies = path.join(applicationRoot, 'node_modules');
+  await fs.mkdir(dependencies);
+  for (const name of await fs.readdir(path.join(root, 'node_modules'))) {
+    if (['.strapi', '.cache', '.vite'].includes(name)) continue;
+    await fs.symlink(path.join(root, 'node_modules', name), path.join(dependencies, name));
+  }
+  const child = spawn(process.execPath, [
+    '--require', path.join(root, 'tests/helpers/offline.cjs'),
+    path.join(root, 'node_modules/@strapi/strapi/bin/strapi.js'), 'build',
+  ], { cwd: applicationRoot, env: { ...process.env, NODE_ENV: 'production' }, stdio: 'inherit' });
+  adminBuild = child;
+  let timedOut = false;
+  let forceTimer;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGTERM');
+    forceTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
+  }, 90_000);
+  try {
+    const [code, signal] = await once(child, 'exit');
+    if (timedOut || signal || code !== 0) throw new Error('Disposable admin build failed' + (timedOut ? ' (startup timeout)' : ''));
+    await fs.access(path.join(applicationRoot, 'build/index.html'));
+  } finally {
+    clearTimeout(timer);
+    clearTimeout(forceTimer);
+    adminBuild = null;
+  }
+}
 
 async function stop() {
   if (stopping) return stopping;
   stopping = (async () => {
     try {
+      if (adminBuild && adminBuild.exitCode === null && adminBuild.signalCode === null) {
+        const exited = once(adminBuild, 'exit');
+        adminBuild.kill('SIGTERM');
+        const timer = setTimeout(() => adminBuild?.kill('SIGKILL'), 5_000);
+        try { await exited; } finally { clearTimeout(timer); }
+      }
       if (secureServer) {
         secureServer.closeAllConnections();
         await new Promise((resolve) => secureServer.close(resolve));
@@ -72,6 +117,7 @@ async function main() {
   const root = path.resolve(__dirname, '..');
   process.chdir(root);
   temporary = await fs.mkdtemp('/tmp/contenthub-fullstack-');
+  const applicationRoot = path.join(temporary, 'app');
   const publicDir = path.join(temporary, 'public');
   await fs.mkdir(path.join(publicDir, 'uploads'), { recursive: true });
   const keep = Object.fromEntries(['PATH', 'HOME', 'TZ', 'NODE_EXTRA_CA_CERTS'].filter((name) => process.env[name]).map((name) => [name, process.env[name]]));
@@ -79,7 +125,7 @@ async function main() {
   const webhookSecret = 'regression-webhook-secret';
   Object.assign(process.env, keep, {
     NODE_ENV: 'test', ENV_PATH: '/dev/null', CI: 'true',
-    DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: path.relative(root, path.join(temporary, 'data.sqlite')),
+    DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: path.relative(applicationRoot, path.join(temporary, 'data.sqlite')),
     APP_KEYS: 'regression-key-one,regression-key-two',
     ADMIN_JWT_SECRET: 'regression-admin-secret-not-for-deployment',
     API_TOKEN_SALT: 'regression-api-token-salt', TRANSFER_TOKEN_SALT: 'regression-transfer-salt',
@@ -112,8 +158,11 @@ async function main() {
     return originalFetch(input, init);
   };
 
+  await prepareApplication(root, applicationRoot);
+  process.chdir(applicationRoot);
+
   const signalListeners = new Map(['SIGINT', 'SIGTERM'].map((signal) => [signal, process.listeners(signal)]));
-  app = require('@strapi/strapi').createStrapi({ appDir: root, distDir: root });
+  app = require('@strapi/strapi').createStrapi({ appDir: applicationRoot, distDir: applicationRoot });
   // Strapi's CLI signal handler calls process.exit immediately after destroy.
   // This launcher must finish deleting its owned files before exiting instead.
   for (const [signal, previous] of signalListeners) {
@@ -152,6 +201,22 @@ async function main() {
   await app.documents(PRICING_UID).create({ data: {
     indiaPriceRupees: 9, otherCountriesPriceUsd: 1,
     storyIndiaPriceRupees: 36, storyOtherCountriesPriceUsd: 5,
+  } });
+  // Positive blog journeys must read real published content. A healthy empty
+  // CMS response intentionally no longer falls back to bundled articles.
+  await app.documents(BLOG_UID).create({ status: 'published', data: {
+    title: 'A birthday guide from the disposable CMS',
+    slug: 'regression-published-birthday-guide',
+    excerpt: 'A local published guide for the real CMS navigation journey.',
+    content: '## Make their birthday personal\n\nChoose a favourite memory and write a thoughtful birthday message. This guide comes from the disposable CMS.',
+    publishedDate: '2026-01-01T00:00:00.000Z', readingTime: 1, featured: true,
+  } });
+  await app.documents(BLOG_UID).create({ status: 'draft', data: {
+    title: 'A private draft from the disposable CMS',
+    slug: 'regression-draft-only-birthday-guide',
+    excerpt: 'This draft must not appear on public blog or discovery pages.',
+    content: '## Private draft\n\nThis unpublished guide stays outside the public article inventory.',
+    readingTime: 1,
   } });
   const podEnvironment = await require('../tests/helpers/pod-stack-configuration.cjs')(app, frontendOrigin);
   const apiToken = await app.admin.services['api-token'].create({

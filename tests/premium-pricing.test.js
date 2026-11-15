@@ -240,6 +240,44 @@ test('new Razorpay orders use the saved price and existing orders retain theirs'
       assert.equal(providerOrders[index + 3].amount, quote.amountPaise);
       assert.equal(providerOrders[index + 3].currency, quote.currency);
     }
+
+    celebration.country = 'BG';
+    const bulgarianQuote = await purchase.getAccess(celebration.customroute, 'US');
+    assert.equal(bulgarianQuote.currency, 'EUR');
+    assert.equal(bulgarianQuote.amountPaise, 449);
+    assert.equal(bulgarianQuote.originalAmountPaise, 899);
+    const bulgarianPurchaseId = '00000000-0000-4000-8000-000000000006';
+    const bulgarianOrder = await purchase.createOrder({
+      slug: celebration.customroute, purchaseId: bulgarianPurchaseId,
+      country: 'US', ownerId: 42,
+    });
+    assert.equal(bulgarianOrder.currency, 'EUR');
+    assert.equal(bulgarianOrder.amount, 449);
+    assert.equal(providerOrders.at(-1).currency, 'EUR');
+    assert.equal(providerOrders.at(-1).amount, 449);
+
+    settings.europePriceEur = '6.49';
+    const providerCount = providerOrders.length;
+    const retriedBulgarianOrder = await purchase.createOrder({
+      slug: celebration.customroute, purchaseId: bulgarianPurchaseId,
+      country: 'IN', ownerId: 42,
+    });
+    assert.equal(retriedBulgarianOrder.currency, 'EUR');
+    assert.equal(retriedBulgarianOrder.amount, 449, 'A retry retains the saved EUR order amount');
+    assert.equal(providerOrders.length, providerCount);
+    const previousIndianOrder = await purchase.createOrder({
+      slug: celebration.customroute, purchaseId: firstId,
+      country: 'BG', ownerId: 42,
+    });
+    assert.equal(previousIndianOrder.currency, 'INR');
+    assert.equal(previousIndianOrder.amount, 1800, 'Mapping changes never rewrite existing payment attempts');
+    assert.equal(providerOrders.length, providerCount);
+
+    settings.europePriceEur = null;
+    const missingEuroQuote = await purchase.getAccess(celebration.customroute, 'BG');
+    assert.equal(missingEuroQuote.currency, 'USD');
+    assert.equal(missingEuroQuote.amountPaise, 500);
+    assert.equal(missingEuroQuote.originalAmountPaise, 1000);
   } finally {
     if (previousKeyId === undefined) delete process.env.RAZORPAY_KEY_ID;
     else process.env.RAZORPAY_KEY_ID = previousKeyId;

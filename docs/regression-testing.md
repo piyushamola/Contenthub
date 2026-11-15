@@ -1,5 +1,56 @@
 # Regression checks
 
+## November 14 complete requested execution
+
+The later explicit complete-regression request passed `npm run check` under
+Node 22.23.4: 203/203 unit cases, real SQLite lifecycle/HTTP integration, the
+disposable-server suite and admin production build. The real integration suite
+also passed on a fresh disposable PostgreSQL 16.10 cluster. Earlier PostgreSQL
+initialization timeouts and the runner diagnostic change are preserved in the
+[execution record](test-runs/2026-11-14-full-regression.md). Normal PostgreSQL
+sync/WAL settings and all existing setup/application timeouts remain unchanged.
+These results supersede the unrun status for backend changes below; frontend,
+media and provider/production checks have their own scope and records.
+
+## November 14 canonical opening-time previews
+
+The read-only server-token route `POST /api/celebration-schedule/preview`
+returns the same country/saved-zone interpretation used by creation and Story
+saves. A Story document requires its owner, and its saved country and named
+zone take priority over the current visitor country. Published schedules stay
+locked. Quick midnight/morning options advance the calendar in the effective
+zone, including daylight-saving transitions. The response contains the
+canonical UTC instant, local input, named zone and validation warning; it never
+saves a draft, reserves a link or sets expiry/payment state.
+
+`tests/celebration-schedule.test.js` covers calendar boundaries, saved zones,
+invalid wall times and old draft warnings. `tests/schedule-preview.test.js`
+covers the controller's owner/locked response contract. The real Strapi HTTP
+helper `tests/helpers/schedule-preview-regression.cjs`, called by
+`tests/helpers/http-regression.cjs`, covers token policy, owned reads and
+unchanged database rows. Existing `npm run check` discovers these cases.
+Matching frontend unit, API-fixture and browser cases cover displayed saved
+versus unsaved clocks, country forwarding, failures and late-response races
+(frontend catalog CRT-29). Deploy this backend route before the frontend.
+No tests, HTTP probes, builds, typechecks, lint or other verification were run.
+
+## November 14 Bulgaria EUR mapping
+
+The celebration-purchase service maps Bulgaria (`BG`) to configured EUR
+pricing for Standard Premium and Birthday Story. Optional EUR-price fallback,
+saved quote currency/amount, ownership, permissions and entitlements remain.
+The matching frontend uses the same mapping. Unit coverage in
+`tests/payment-regression.test.js` and `tests/premium-pricing.test.js`, and real
+HTTP/database coverage in `tests/helpers/premium-pricing-regression.cjs`, add
+BG quotes, missing-EUR fallback and existing-order cases (PRICE-02/03/04,
+PAY-03/07). The existing backend gates discover these cases.
+
+No tests, integration/HTTP checks, builds, typechecks, lint or verification
+commands ran for this implementation request. Release this service before the
+matching frontend. See the
+[cross-app handoff](../../birthday-celebration/docs/2026-11-14-audit-fixes-implementation.md).
+An unrelated local generated-content-types change was left untouched.
+
 ## November 1 permanent holds for manual personalized orders
 
 The existing POD capture action now persists a permanent manual-order stop

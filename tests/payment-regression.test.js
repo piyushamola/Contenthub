@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const purchaseFactory = require('../src/api/celebration-purchase/services/celebration-purchase');
+const { celebrationLockFixture } = require('./helpers/celebration-lock-fixture.cjs');
 
 const PURCHASE_UID = 'api::celebration-purchase.celebration-purchase';
 const CELEBRATION_UID = 'api::happy-birthday.happy-birthday';
@@ -13,7 +14,7 @@ const PURCHASE_ID = '00000000-0000-4000-8000-000000000001';
 
 // These doubles stop at the database and provider boundaries. Every assertion
 // calls the real service API; the integration suite covers actual Strapi writes.
-function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 100 } } = {}) {
+function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 100 }, onLock } = {}) {
   const celebrationRow = celebration === null ? null : {
     documentId: 'celebration-1',
     customroute: 'regression-birthday',
@@ -62,7 +63,7 @@ function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 10
         if (uid === 'api::happy-birthday.birthday-story') return { findBySlug: async () => null };
         assert.fail(`Unexpected service ${uid}`);
       },
-      db: {
+      db: celebrationLockFixture({
         query: (uid) => {
           assert.ok(rows[uid], `Unexpected query ${uid}`);
           return {
@@ -85,7 +86,7 @@ function fixture({ celebration = {}, purchase = {}, prices = { INR: 900, USD: 10
             },
           };
         },
-      },
+      }, { onLock }),
     },
   });
   const payment = {
@@ -139,7 +140,7 @@ test('Story checkout rejects an old draft schedule for both new and existing ord
       purchase: { productType: 'story' },
     });
     if (!existingOrder) f.rows[PURCHASE_UID].length = 0;
-    await assert.rejects(f.service.createOrder({ slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42 }), /Start after payment/);
+    await assert.rejects(f.service.createOrder({ slug: f.celebration.customroute, purchaseId: PURCHASE_ID, ownerId: 42 }), /clear the scheduled time/);
     assert.deepEqual(f.providerCalls, []);
     assert.equal(f.rows[PURCHASE_UID].length, existingOrder ? 1 : 0);
     if (existingOrder) assert.equal(f.purchase.status, 'created');
@@ -224,6 +225,24 @@ test('captured payments after deletion or expiry are recorded for refund without
       if (f.celebration) assert.equal(f.celebration.premiumUnlocked, false);
     });
   }
+});
+
+test('capture rechecks an erasure committed before the stable-row lock was acquired', async () => {
+  const f = fixture({ onLock: async () => { f.celebration.erasureRequestedAt = '2026-11-14T00:00:00.000Z'; } });
+  const access = await f.service.grantCapturedPurchase(f.purchase, f.payment);
+  assert.equal(access.unlocked, false);
+  assert.equal(access.expired, true);
+  assert.equal(f.celebration.premiumUnlocked, false);
+  assert.equal(f.purchase.status, 'paid');
+  assert.match(f.purchase.failureReason, /review for refund/);
+});
+
+test('a failed capture lock leaves entitlement and purchase writes for a later retry', async () => {
+  const f = fixture({ onLock: async () => { throw new Error('Lock unavailable'); } });
+  await assert.rejects(f.service.grantCapturedPurchase(f.purchase, f.payment), /Lock unavailable/);
+  assert.equal(f.celebration.premiumUnlocked, false);
+  assert.equal(f.purchase.status, 'created');
+  assert.equal(f.purchase.razorpayPaymentId, undefined);
 });
 
 test('capture retries are idempotent and duplicate captures preserve the original entitlement', async () => {
@@ -323,6 +342,33 @@ test('access compares an original against the exact product and currency quote w
   }
 });
 
+test('Bulgarian Standard and Story quotes use EUR without changing access or trusted-country rules', () => {
+  const prices = { INR: 900, USD: 199, EUR: 449, originalUSD: 399, originalEUR: 899 };
+  const f = fixture();
+  for (const journeyType of ['standard', 'story']) {
+    const celebration = { ...f.celebration, journeyType, country: ' bg ' };
+    const access = f.service.accessFor(celebration, prices, 'US');
+    assert.equal(access.currency, 'EUR');
+    assert.equal(access.amountPaise, 449);
+    assert.equal(access.originalAmountPaise, 899);
+    assert.equal(access.unlocked, false);
+    assert.deepEqual(access.features, journeyType === 'story' ? [] : ['collage']);
+    for (const EUR of [undefined, null, 0, -1, 1.5, NaN, Infinity]) {
+      const fallback = f.service.accessFor(celebration, { ...prices, EUR }, 'IN');
+      assert.equal(fallback.currency, 'USD');
+      assert.equal(fallback.amountPaise, 199);
+      assert.equal(fallback.originalAmountPaise, 399);
+      assert.equal(fallback.unlocked, false);
+    }
+    const legacy = f.service.accessFor({ ...celebration, country: null }, prices, 'BG');
+    assert.equal(legacy.currency, 'EUR');
+    assert.equal(legacy.amountPaise, 449);
+    const savedUS = f.service.accessFor({ ...celebration, country: 'US' }, prices, 'BG');
+    assert.equal(savedUS.currency, 'USD', 'A Bulgarian visitor cannot replace a saved US billing country');
+  }
+  assert.deepEqual(f.providerCalls, []);
+});
+
 test('access uses the trusted country fallback only when the saved billing country is missing or invalid', async () => {
   const prices = { INR: 900, USD: 100, originalINR: 1800, originalUSD: 250 };
   for (const journeyType of ['standard', 'story']) {
@@ -352,9 +398,9 @@ test('access uses the trusted country fallback only when the saved billing count
 
 test('pending Story access uses its saved currency and amount when displaying an original', async () => {
   const f = fixture({
-    celebration: { journeyType: 'story', country: 'IN' },
+    celebration: { journeyType: 'story', country: 'BG' },
     purchase: { productType: 'story', currency: 'USD', amountPaise: 900 },
-    prices: { INR: 3600, USD: 700, originalINR: 7200, originalUSD: 1000 },
+    prices: { INR: 3600, USD: 700, EUR: 749, originalINR: 7200, originalUSD: 1000, originalEUR: 1499 },
   });
   const quoted = await f.service.getAccess(f.celebration.customroute, 'IN');
   assert.equal(quoted.amountPaise, 900);

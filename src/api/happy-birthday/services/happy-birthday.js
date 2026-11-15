@@ -9,6 +9,7 @@ const { createCoreService } = require('@strapi/strapi').factories;
 const HAPPY_BIRTHDAY_UID = 'api::happy-birthday.happy-birthday';
 const { CELEBRATION_DURATION_MS, celebrationWindowEndMs } = require('../utils/celebration-expiry');
 const { celebrationRetentionDate } = require('../../../privacy/celebration-erasure');
+const { withCelebrationLock } = require('../utils/celebration-lock');
 const CLEANUP_CONCURRENCY = 5;
 const DEFAULT_NON_EXPIRING_ROUTES = 'elena,matt,mike';
 const nonExpiringRoutes = (
@@ -43,17 +44,21 @@ async function forEachWithConcurrency(items, concurrency, callback) {
 module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
   /** Remove public access while retaining the draft and its uploaded media. */
   async unpublishCelebration(documentId) {
+    return withCelebrationLock(strapi, documentId, async () => {
     const published = await strapi.db.query(HAPPY_BIRTHDAY_UID).findOne({
       where: { documentId, publishedAt: { $notNull: true } },
       select: ['documentId', 'customroute', 'journeyType', 'storyFirstPublishedAt', 'premiumUnlocked', 'createdAt', 'expiresAt', 'triggerAt'],
     });
     if (!published) return null;
 
+    // Mark removal before unpublishing. Owner edits lock/check the draft row,
+    // so a simultaneous edit cannot republish a document being removed.
+    await strapi.db.query(HAPPY_BIRTHDAY_UID).updateMany({ where: { documentId }, data: { retentionExpiresAt: celebrationRetentionDate(published) } });
     await strapi.db.query(HAPPY_BIRTHDAY_UID).updateMany({ where: { documentId, journeyType: 'story' }, data: { storyExpiredAt: new Date().toISOString() } });
     const result = await strapi.documents(HAPPY_BIRTHDAY_UID).unpublish({ documentId });
     if (Array.isArray(result?.entries) && result.entries.length === 0) return null;
-    await strapi.db.query(HAPPY_BIRTHDAY_UID).updateMany({ where: { documentId }, data: { retentionExpiresAt: celebrationRetentionDate(published) } });
     return { documentId, customroute: published.customroute };
+    });
   },
 
   /** Unpublish expired celebrations, retaining their draft content and photos. */
@@ -107,6 +112,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
       CLEANUP_CONCURRENCY,
       async (target) => {
         try {
+          await withCelebrationLock(strapi, target.documentId, async () => {
           const current = await strapi.db.query(HAPPY_BIRTHDAY_UID).findOne({
             where: {
               documentId: target.documentId,
@@ -135,6 +141,7 @@ module.exports = createCoreService(HAPPY_BIRTHDAY_UID, ({ strapi }) => ({
             result.unpublished += 1;
             if (unpublished.customroute) result.routes.push(unpublished.customroute);
           }
+          });
         } catch (error) {
           result.failed += 1;
           strapi.log.error(

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   assertStoryCheckoutSchedule,
   resolveTrigger,
+  previewCelebrationSchedule,
   storyTriggerExpiry,
   storyTriggerPatch,
   timezoneForCountry,
@@ -15,6 +16,33 @@ test('midnight is interpreted in the celebration country, not UTC', () => {
   assert.equal(zonedLocalToUtc('2026-10-07T00:00', 'Asia/Kolkata'), '2026-10-06T18:30:00.000Z');
   assert.equal(zonedLocalToUtc('2026-01-04T00:00', 'America/Los_Angeles'), '2026-01-04T08:00:00.000Z');
   assert.equal(zonedLocalToUtc('2026-07-04T00:00', 'America/Los_Angeles'), '2026-07-04T07:00:00.000Z');
+});
+
+test('schedule previews calculate tomorrow in the effective country clock, not the browser calendar', () => {
+  const now = Date.parse('2026-11-14T20:00:00Z'); // Nov 15 in India; still Nov 14 in California.
+  const preview = previewCelebrationSchedule({ country: 'IN', browserTimeZone: 'America/Los_Angeles', preset: 'midnight', now });
+  assert.equal(preview.timezone, 'Asia/Kolkata');
+  assert.equal(preview.triggerLocal, '2026-11-16T00:00');
+  assert.equal(preview.triggerAt, '2026-11-15T18:30:00.000Z');
+  assert.equal(Object.hasOwn(preview, 'expiresAt'), false);
+  const morning = previewCelebrationSchedule({ country: 'US', browserTimeZone: 'America/Los_Angeles', preset: 'tomorrowMorning', now });
+  assert.equal(morning.triggerLocal, '2026-11-15T09:00');
+  assert.equal(morning.triggerAt, '2026-11-15T17:00:00.000Z');
+});
+
+test('previews preserve saved zones, calendar DST boundaries and old draft dates without accepting invalid wall times', () => {
+  const preview = previewCelebrationSchedule({ country: 'US', browserTimeZone: 'America/New_York', existingTimezone: 'America/Los_Angeles', preset: 'midnight', now: Date.parse('2026-03-08T19:00:00Z') });
+  assert.equal(preview.timezone, 'America/Los_Angeles');
+  assert.equal(preview.triggerLocal, '2026-03-09T00:00');
+  assert.equal(preview.triggerAt, '2026-03-09T07:00:00.000Z');
+  const old = previewCelebrationSchedule({ country: 'IN', localTime: '2026-11-01T14:29', now: Date.parse('2026-11-01T09:00:00Z') });
+  assert.equal(old.triggerAt, '2026-11-01T08:59:00.000Z');
+  assert.match(old.validationError, /at least a minute/);
+  const immediate = previewCelebrationSchedule({ country: 'UNKNOWN', browserTimeZone: 'Pacific/Auckland', localTime: '' });
+  assert.equal(immediate.triggerAt, null);
+  assert.equal(immediate.timezone, 'Pacific/Auckland');
+  assert.throws(() => previewCelebrationSchedule({ country: 'US', browserTimeZone: 'America/New_York', localTime: '2026-03-08T02:30' }), /valid date and time/);
+  assert.throws(() => previewCelebrationSchedule({ country: 'IN', preset: 'yesterday' }), /valid opening-time option/);
 });
 
 test('a country with several time zones uses the creator zone when it belongs there', () => {
@@ -94,7 +122,7 @@ test('private Story checkpoints keep old opening times but checkout requires an 
   assert.deepEqual(saved, { triggerAt: '2026-11-01T08:59:00.000Z', timezone: 'Asia/Kolkata' });
   assert.deepEqual(storyTriggerPatch({ ...entry, ...saved }, { triggerLocal: '2026-11-01T14:29' }), saved);
   assert.deepEqual(storyTriggerPatch({ ...entry, ...saved }, { editorStep: 1 }), {});
-  assert.throws(() => assertStoryCheckoutSchedule({ ...entry, ...saved }, now), /Start after payment/);
+  assert.throws(() => assertStoryCheckoutSchedule({ ...entry, ...saved }, now), /clear the scheduled time/);
   const cleared = storyTriggerPatch({ ...entry, ...saved }, { triggerLocal: '' });
   assert.deepEqual(cleared, { triggerAt: null, timezone: null });
   assert.doesNotThrow(() => assertStoryCheckoutSchedule({ ...entry, ...cleared }, now));

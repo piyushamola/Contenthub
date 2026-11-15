@@ -71,7 +71,8 @@ function startPostgres() {
   if (!Number.isInteger(port) || port < 1024) throw new Error('Cannot allocate disposable PostgreSQL port');
   const run = (command, args) => {
     const result = spawnSync(executable(command), args, { env, encoding: 'utf8', timeout: 30_000 });
-    if (result.error || result.status !== 0) throw new Error('Disposable PostgreSQL ' + command + ' failed: ' + (result.error?.message || result.stderr));
+    if (result.error || result.status !== 0) throw new Error('Disposable PostgreSQL ' + command + ' failed: ' +
+      [result.error?.message, result.stderr?.trim(), result.stdout?.trim()].filter(Boolean).join('\n'));
   };
   run('initdb', ['-D', data, '-U', 'regression', '--auth=trust', '--encoding=UTF8', '--no-locale']);
   postgres = { executable, data };

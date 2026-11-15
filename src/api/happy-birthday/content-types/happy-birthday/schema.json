@@ -120,6 +120,21 @@
       "type": "json",
       "private": true
     },
+    "standardRevision": {
+      "type": "integer",
+      "default": 0,
+      "private": true
+    },
+    "standardEditAssets": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": ["images"],
+      "private": true
+    },
+    "standardEditCleanupIds": {
+      "type": "json",
+      "private": true
+    },
     "storyPublishedContent": {
       "type": "json"
     },

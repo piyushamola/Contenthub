@@ -75,6 +75,36 @@ module.exports = async function checkOriginalPricing(app, user, celebration, req
     }
 
     await app.documents(PRICING_UID).update({ documentId: pricing.documentId, data: {
+      europePriceEur: 3.25, europeOriginalPriceEur: 6.5,
+      storyEuropePriceEur: 8.75, storyEuropeOriginalPriceEur: 17.5,
+    } });
+    for (const [documentId, slug, amount, original] of [
+      [celebration.documentId, celebration.customroute, 325, 650],
+      [story.documentId, story.slug, 875, 1750],
+    ]) {
+      await app.db.query(CELEBRATION_UID).updateMany({ where: { documentId }, data: { country: 'BG' } });
+      const access = await request(`/celebration-payments/access/${slug}?country=US`, { token });
+      assert.equal(access.status, 200);
+      assert.equal(access.body.currency, 'EUR');
+      assert.equal(access.body.amountPaise, amount);
+      assert.equal(access.body.originalAmountPaise, original);
+      assert.equal(access.body.unlocked, false, 'Regional currency selection cannot grant paid access');
+      const unauthorized = await request(`/celebration-payments/access/${slug}?country=BG`);
+      assert.equal(unauthorized.status, 403);
+    }
+    await app.documents(PRICING_UID).update({ documentId: pricing.documentId, data: {
+      europePriceEur: null, europeOriginalPriceEur: null,
+      storyEuropePriceEur: null, storyEuropeOriginalPriceEur: null,
+    } });
+    for (const [slug, amount] of [[celebration.customroute, 100], [story.slug, 500]]) {
+      const fallback = await request(`/celebration-payments/access/${slug}?country=IN`, { token });
+      assert.equal(fallback.status, 200);
+      assert.equal(fallback.body.currency, 'USD');
+      assert.equal(fallback.body.amountPaise, amount, 'Unset EUR prices preserve the international fallback');
+      assert.equal(fallback.body.unlocked, false);
+    }
+
+    await app.documents(PRICING_UID).update({ documentId: pricing.documentId, data: {
       indiaOriginalPriceRupees: 9, otherCountriesOriginalPriceUsd: 0.99,
       storyIndiaOriginalPriceRupees: 36, storyOtherCountriesOriginalPriceUsd: 4.99,
     } });
@@ -112,5 +142,5 @@ module.exports = async function checkOriginalPricing(app, user, celebration, req
     if (story) await app.documents(CELEBRATION_UID).delete({ documentId: story.documentId });
     await app.documents(PRICING_UID).delete({ documentId: pricing.documentId });
   }
-  console.log('PASS: optional original pricing persists, clears and updates through real Strapi; INR/USD Standard and Story HTTP quotes retain current charges and permissions.');
+  console.log('PASS: optional original pricing persists, clears and updates through real Strapi; INR/USD/Bulgarian EUR Standard and Story HTTP quotes retain current charges and permissions.');
 };

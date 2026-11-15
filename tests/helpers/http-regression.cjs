@@ -120,6 +120,7 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   const serverToken = await app.admin.services['api-token'].create({
     name: 'regression-only', description: 'Temporary test database only', type: 'full-access', lifespan: null,
   });
+  await require('./schedule-preview-regression.cjs')(app, user, request, serverToken.accessKey, token, other.id);
   await require('./pod-regression.cjs')(app, base, token, serverToken.accessKey);
   const pricing = await request('/celebration-payments/pricing', { token: serverToken.accessKey });
   assert.equal(pricing.status, 200);
@@ -129,6 +130,7 @@ module.exports = async function checkHttpContracts(app, user, celebration) {
   assert.deepEqual(storyPricing.body, { INR: 3600, USD: 500, originalINR: null, originalUSD: null });
   await require('./premium-pricing-regression.cjs')(app, user, celebration, request, serverToken.accessKey);
   await require('./story-from-standard-regression.cjs')(app, user, request, serverToken.accessKey, token, other.id);
+  await require('./standard-edit-regression.cjs')(app, user, request, serverToken.accessKey, token, other.id);
   await require('./celebration-wishes-regression.cjs')(app, user, request, serverToken.accessKey, token);
   const standardData = {
     personname: 'HTTP Standard', personemail: 'http-standard@example.invalid',

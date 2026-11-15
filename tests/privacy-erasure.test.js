@@ -3,15 +3,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { eraseCelebration, retentionDate, celebrationRetentionDate, purgeRetained } = require('../src/privacy/celebration-erasure');
 const ownerPolicy = require('../src/api/happy-birthday/policies/is-owner-or-admin');
-function fixture({ shared = false, failure = false } = {}) {
+const { celebrationLockFixture } = require('./helpers/celebration-lock-fixture.cjs');
+function fixture({ shared = false, failure = false, onLock } = {}) {
   const rows = [{ id: 1, documentId: 'birthday', customroute: 'private-birthday', images: [{ id: 10 }], storyAssets: [{ id: 11 }] }];
   const removed = []; let deleted = false; let unpublished = false; let snapshot = { name: 'Private recipient' };
   return { rows, removed, get deleted() { return deleted; }, get unpublished() { return unpublished; }, get snapshot() { return snapshot; }, strapi: {
-    db: { query: uid => ({
+    db: celebrationLockFixture({ query: uid => ({
       findMany: async () => rows,
       findOne: async ({ where }) => uid === 'plugin::upload.file' ? { id: where.id, related: [{ __type: 'api::happy-birthday.happy-birthday', id: shared && where.id === 11 ? 99 : 1 }] } : null,
       updateMany: async ({ data }) => { if (uid.includes('celebration-purchase')) snapshot = data.storySnapshot; else Object.assign(rows[0], data); return { count: 1 }; },
-    }) },
+    }) }, { onLock }),
     service: () => ({ unpublishCelebration: async () => { unpublished = true; } }),
     plugin: () => ({ service: () => ({ remove: async file => { if (failure) throw new Error('Storage unavailable'); removed.push(file.id); } }) }),
     documents: () => ({ delete: async () => { deleted = true; } }),
@@ -26,6 +27,21 @@ test('shared media survives another celebration erasure', async () => {
 });
 test('storage failure leaves a retry marker and document, while stopping public access', async () => {
  const f = fixture({ failure: true }); await assert.rejects(eraseCelebration(f.strapi, 'birthday'), /Storage unavailable/); assert.equal(f.deleted, false); assert.equal(f.unpublished, true); assert.ok(f.rows[0].erasureRequestedAt);
+});
+test('erasure takes its media snapshot after acquiring the stable document lock', async () => {
+ const f = fixture({ onLock: async () => { f.rows[0].images.push({ id: 12 }); } });
+ assert.equal((await eraseCelebration(f.strapi, 'birthday')).erased, true);
+ assert.deepEqual(f.removed, [10, 12, 11]);
+ assert.ok(f.rows[0].erasureRequestedAt);
+});
+test('a failed erasure lock prevents the marker, public removal and provider work', async () => {
+ const f = fixture({ onLock: async () => { throw new Error('Lock unavailable'); } });
+ await assert.rejects(eraseCelebration(f.strapi, 'birthday'), /Lock unavailable/);
+ assert.equal(f.rows[0].erasureRequestedAt, undefined);
+ assert.equal(f.unpublished, false);
+ assert.equal(f.deleted, false);
+ assert.deepEqual(f.removed, []);
+ assert.deepEqual(f.snapshot, { name: 'Private recipient' });
 });
 test('demo and absent records cannot accidentally be purged', async () => {
  const f = fixture(); f.rows[0].customroute = 'elena'; await assert.rejects(eraseCelebration(f.strapi, 'birthday'), /Demo/); assert.deepEqual(f.removed, []);
@@ -43,7 +59,7 @@ function cleanupFixture(input, { published = [], failMedia = false } = {}) {
  const state = { failMedia };
  const strapi = {
   log: { error() {} },
-  db: { query: uid => ({
+  db: celebrationLockFixture({ query: uid => ({
    findMany: async ({ where, limit }) => {
     if (where.documentId) return rows.filter(row => row.documentId === where.documentId);
     scans++;
@@ -58,7 +74,7 @@ function cleanupFixture(input, { published = [], failMedia = false } = {}) {
     matches.forEach(row => Object.assign(row, data));
     return { count: matches.length };
    },
-  }) },
+  }) }),
   service: () => ({ unpublishCelebration: async documentId => { live.delete(documentId); } }),
   plugin: () => ({ service: () => ({ remove: async file => {
    if (state.failMedia) throw new Error('Storage unavailable');

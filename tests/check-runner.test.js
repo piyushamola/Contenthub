@@ -103,6 +103,7 @@ test('the PostgreSQL integration gate starts a disposable loopback cluster and i
   assert.equal(options.env.REGRESSION_DISPOSABLE_POSTGRES, 'true');
   assert.equal(options.env.ENV_PATH, '/dev/null');
   assert.equal(childCalls[1][1][0], '-D');
+  assert.equal(childCalls[2][1][childCalls[2][1].indexOf('-o') + 1], '-h 127.0.0.1 -p 55432 -k /tmp/isolated-check-fixture/pgsocket', 'The running server keeps its default fsync and WAL settings');
   assert.equal(childCalls[2][1].at(-1), 'start');
   assert.equal(childCalls[4][1].at(-1), 'stop');
   assert.deepEqual(removed, ['/tmp/isolated-check-fixture']);

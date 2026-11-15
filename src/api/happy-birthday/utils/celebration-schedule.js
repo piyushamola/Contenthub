@@ -223,6 +223,26 @@ function presentSchedule(entry) {
   };
 }
 
+/** A read-only preview uses the same effective clock as creation/checkpoint saves. */
+function previewCelebrationSchedule({ country, existingTimezone, browserTimeZone, localTime = '', preset, now = Date.now() }) {
+  const timezone = timezoneForCountry(country, browserTimeZone, existingTimezone);
+  if (preset !== undefined) {
+    if (!['midnight', 'tomorrowMorning'].includes(preset)) throw new Error('Choose a valid opening-time option.');
+    const today = wallParts(new Date(now), timezone);
+    // Advance a calendar date, not 24 elapsed hours: DST days are not always 24h.
+    const tomorrow = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day) + 1));
+    localTime = `${tomorrow.getUTCFullYear()}-${pad(tomorrow.getUTCMonth() + 1)}-${pad(tomorrow.getUTCDate())}T${preset === 'midnight' ? '00' : '09'}:00`;
+  }
+  if (typeof localTime !== 'string' || localTime.length > 32) throw new Error('Choose a valid opening time.');
+  localTime = localTime.trim();
+  const common = { timezone, timezoneLabel: timezoneLabel(timezone, country), serverNow: new Date(now).toISOString() };
+  if (!localTime) return { ...common, triggerAt: null, triggerLocal: '', validationError: null };
+  const parsed = parseTrigger({ country, existingTimezone, browserTimeZone, localTime });
+  if (parsed.error) throw new Error(parsed.error);
+  const validation = resolveTrigger({ country, existingTimezone, browserTimeZone, localTime, now });
+  return { ...common, triggerAt: parsed.triggerAt, triggerLocal: formatLocal(parsed.triggerAt, timezone), validationError: validation.error || null };
+}
+
 function isBeforeTrigger(triggerAt, now = Date.now()) {
   const parsed = Date.parse(triggerAt || '');
   return Number.isFinite(parsed) && parsed > now;
@@ -255,13 +275,13 @@ function assertStoryCheckoutSchedule(entry, now = Date.now()) {
   if (entry?.storyFirstPublishedAt || entry?.triggerAt == null) return;
   const triggerMs = Date.parse(entry.triggerAt);
   if (!Number.isFinite(triggerMs)) {
-    throw new Error('Choose a valid opening time or Start after payment before checkout.');
+    throw new Error('Choose a valid opening time or clear the scheduled time before checkout.');
   }
   if (triggerMs < now + MIN_LEAD_MS) {
-    throw new Error('Your saved opening time has passed or is less than a minute away. Choose a future time or Start after payment before checkout.');
+    throw new Error('Your saved opening time has passed or is less than a minute away. Choose a future time or clear the scheduled time before checkout.');
   }
   if (triggerMs > now + MAX_LEAD_MS) {
-    throw new Error('Choose an opening time within the next year or Start after payment before checkout.');
+    throw new Error('Choose an opening time within the next year or clear the scheduled time before checkout.');
   }
 }
 
@@ -280,6 +300,7 @@ module.exports = {
   formatLocal,
   isBeforeTrigger,
   presentSchedule,
+  previewCelebrationSchedule,
   resolveTrigger,
   storyTriggerExpiry,
   storyTriggerPatch,
