@@ -959,8 +959,14 @@ export interface ApiHappyBirthdayHappyBirthday
       Schema.Attribute.DefaultTo<false>;
     publishedAt: Schema.Attribute.DateTime;
     retentionExpiresAt: Schema.Attribute.DateTime & Schema.Attribute.Private;
+    standardEditAssets: Schema.Attribute.Media<'images', true> &
+      Schema.Attribute.Private;
+    standardEditCleanupIds: Schema.Attribute.JSON & Schema.Attribute.Private;
+    standardRevision: Schema.Attribute.Integer &
+      Schema.Attribute.Private &
+      Schema.Attribute.DefaultTo<0>;
     storyAssetMetadata: Schema.Attribute.JSON & Schema.Attribute.Private;
-    storyAssets: Schema.Attribute.Media<'images' | 'audios', true> &
+    storyAssets: Schema.Attribute.Media<'images' | 'audios' | 'videos', true> &
       Schema.Attribute.Private;
     storyContent: Schema.Attribute.JSON & Schema.Attribute.Private;
     storyEditorStep: Schema.Attribute.Integer &
@@ -1164,6 +1170,55 @@ export interface ApiPaymentWebhookEventPaymentWebhookEvent
   };
 }
 
+export interface ApiPlayGamePlayGame extends Struct.CollectionTypeSchema {
+  collectionName: 'play_games';
+  info: {
+    description: 'Isolated Play Together party and birthday mini-games with player scores';
+    displayName: 'Play game';
+    pluralName: 'play-games';
+    singularName: 'play-game';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    config: Schema.Attribute.JSON & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    creatorEmail: Schema.Attribute.Email;
+    creatorName: Schema.Attribute.String & Schema.Attribute.Required;
+    gameType: Schema.Attribute.Enumeration<
+      ['memory-quiz', 'birthday-wheel', 'most-likely-to']
+    > &
+      Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::play-game.play-game'
+    > &
+      Schema.Attribute.Private;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    playCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    plays: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    recipientName: Schema.Attribute.String & Schema.Attribute.Required;
+    slug: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique &
+      Schema.Attribute.SetMinMaxLength<{
+        minLength: 3;
+      }>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPodOrderAuditPodOrderAudit
   extends Struct.CollectionTypeSchema {
   collectionName: 'pod_order_audits';
@@ -1308,7 +1363,7 @@ export interface ApiPremiumPricingPremiumPricing
   extends Struct.SingleTypeSchema {
   collectionName: 'premium_pricings';
   info: {
-    description: 'Configurable regional pricing for India (INR), UK (GBP), Eurozone (EUR), and all other countries (USD)';
+    description: 'Configurable regional pricing for India (INR), Pakistan (PKR), UK (GBP), Eurozone (EUR), and all other countries (USD)';
     displayName: 'Premium pricing';
     pluralName: 'premium-pricings';
     singularName: 'premium-pricing';
@@ -1372,6 +1427,20 @@ export interface ApiPremiumPricingPremiumPricing
         number
       > &
       Schema.Attribute.DefaultTo<1>;
+    pakistanOriginalPricePkr: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    pakistanPricePkr: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     publishedAt: Schema.Attribute.DateTime;
     storyEuropeOriginalPriceEur: Schema.Attribute.Decimal &
       Schema.Attribute.SetMinMax<
@@ -1419,6 +1488,20 @@ export interface ApiPremiumPricingPremiumPricing
         number
       > &
       Schema.Attribute.DefaultTo<5>;
+    storyPakistanOriginalPricePkr: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    storyPakistanPricePkr: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
     storyUkOriginalPriceGbp: Schema.Attribute.Decimal &
       Schema.Attribute.SetMinMax<
         {
@@ -2216,6 +2299,7 @@ declare module '@strapi/strapi' {
       'api::news.news': ApiNewsNews;
       'api::newsletter-subscriber.newsletter-subscriber': ApiNewsletterSubscriberNewsletterSubscriber;
       'api::payment-webhook-event.payment-webhook-event': ApiPaymentWebhookEventPaymentWebhookEvent;
+      'api::play-game.play-game': ApiPlayGamePlayGame;
       'api::pod-order-audit.pod-order-audit': ApiPodOrderAuditPodOrderAudit;
       'api::pod-order.pod-order': ApiPodOrderPodOrder;
       'api::premium-pricing.premium-pricing': ApiPremiumPricingPremiumPricing;

@@ -277,10 +277,12 @@ module.exports = ({ strapi }) => ({
     const asset = await strapi.db
       .query('plugin::upload.file')
       .findOne({ where: { id: fileId } });
-    if (!asset || !/^(image|audio)\//.test(asset.mime))
+    if (!asset || !/^(image|audio|video)\//.test(asset.mime))
       throw new Error('Unsupported story upload');
     if (asset.mime.startsWith('audio/') && !(duration > 0 && duration <= 30))
       throw new Error('Voice message must be 30 seconds or shorter');
+    if (asset.mime.startsWith('video/') && !(duration > 0 && duration <= 10))
+      throw new Error('Video message must be 10 seconds or shorter');
     if ((entry.storyAssets || []).length >= 30)
       throw new Error('This story has reached its upload limit');
     await strapi.documents(UID).update({

@@ -81,15 +81,18 @@ function normalizeStory(
   const media = (id, kind, required) => {
     if (id == null && !required) return null;
     const asset = owned.get(id);
-    if (!asset || !asset.mime?.startsWith(`${kind}/`))
+    if (!asset || !(kind === 'message' ? /^(audio|video)\//.test(asset.mime || '') : asset.mime?.startsWith(`${kind}/`)))
       fail(
-        `Choose an uploaded ${kind === 'image' ? 'photo' : 'voice message'} from this story`,
+        `Choose an uploaded ${kind === 'image' ? 'photo' : 'voice or video message'} from this story`,
       );
     if (
-      kind === 'audio' &&
+      kind === 'message' && asset.mime.startsWith('audio/') &&
       !(metadata[id]?.duration > 0 && metadata[id].duration <= 30)
     )
       fail('Voice message must be 30 seconds or shorter');
+    if (kind === 'message' && asset.mime.startsWith('video/') &&
+      !(metadata[id]?.duration > 0 && metadata[id].duration <= 10))
+      fail('Video message must be 10 seconds or shorter');
     return id;
   };
   const slug = text(input.slug, 80, 'Link name', complete).toLowerCase();
@@ -159,7 +162,7 @@ function normalizeStory(
         date,
       };
     }),
-    voiceId: media(input.voiceId, 'audio', false),
+    voiceId: media(input.voiceId, 'message', false),
     scratchMessage: text(
       input.scratchMessage,
       500,
@@ -183,6 +186,7 @@ function materializeStory(content, assets, metadata) {
     voice: content.voiceId
       ? {
           ...photo(content.voiceId),
+          mime: byId.get(content.voiceId)?.mime,
           duration: metadata[content.voiceId]?.duration,
         }
       : null,

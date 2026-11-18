@@ -1,5 +1,40 @@
 # Regression checks
 
+## November 17–18 complete requested backend execution
+
+The later complete-regression request passed `npm run check` under Node 22.23.4:
+205/205 units, real SQLite lifecycle/HTTP integration, disposable-server checks
+and production admin build. This includes the new owned-video attachment,
+saved metadata and published Story message coverage. The complete cross-app
+matrix executed all 81 cases: 80 passed initially and the Story export observer
+case passed its focused follow-up. The frontend matrix likewise has passing
+follow-up results for every initial failure. These are complete executions with
+focused closure, not clean monolithic reruns. The frontend and cross-app browser
+runs have their own results in the
+[complete run report](../../birthday-celebration/docs/test-runs/2026-11-17-complete-regression.md).
+The additional PostgreSQL and actual Razorpay sandbox suites are not included
+in this command. Gelato stashes were not changed. This execution supersedes the
+backend unrun status below only for the checks recorded here.
+
+## November 17 Story video messages — unrun
+
+The private `storyAssets` media field permits videos alongside photos/audio.
+Story attachment and normalization accept an owned video with positive duration up
+to 10 seconds, while voice retains its 30-second cap. Published message snapshots
+preserve MIME so the frontend renders a video player. The existing `voiceId` field
+continues to select one optional recording; old audio content remains compatible.
+
+`tests/story-message.test.js` covers supported media, missing/overlong/invalid
+metadata, foreign IDs and wrong media kinds. `scripts/test-birthday-story.cjs` adds
+real ownership, attachment, saved metadata and published video-snapshot coverage.
+Both remain in the existing backend gate. Matching frontend fixtures, API/browser,
+storyboard and media coverage are in the birthday-celebration repository.
+
+No backend tests, HTTP integration, build, lint or typecheck were executed for this
+request. Only the frontend slideshow checks were requested and run. Deploy this
+schema/service update before the frontend starts uploading video messages. See
+[the cross-app notes](../../birthday-celebration/docs/2026-11-17-story-cake-slideshow-video.md).
+
 ## November 14 complete requested execution
 
 The later explicit complete-regression request passed `npm run check` under

@@ -193,6 +193,31 @@ let app;
     voiceId: audio.id,
     scratchMessage: 'I would choose you again.',
   };
+  // Persisted video contract: draft attachment, ownership, snapshot and publication.
+  const videoFile = await app.db.query('plugin::upload.file').create({ data: {
+    name: 'message.mp4', hash: crypto.randomUUID(), ext: '.mp4', mime: 'video/mp4',
+    size: 1, url: '/test-message.mp4', provider: 'local',
+  } });
+  let videoDraft = await service.create(user.id, 'IN', crypto.randomUUID());
+  await assert.rejects(() => service.attach(videoDraft.documentId, user.id + 100, videoFile.id, 10), /not found/);
+  for (const duration of [null, 0, 10.1])
+    await assert.rejects(() => service.attach(videoDraft.documentId, user.id, videoFile.id, duration), /10 seconds/);
+  await service.attach(videoDraft.documentId, user.id, videoFile.id, 10);
+  for (const file of files.slice(0, 3)) await service.attach(videoDraft.documentId, user.id, file.id, null);
+  videoDraft = await service.save(videoDraft.documentId, user.id,
+    { ...content, slug: 'story-video-contract', voiceId: videoFile.id }, videoDraft.revision);
+  const videoSnapshot = await service.snapshot(await service.draft(videoDraft.documentId));
+  assert.equal(videoSnapshot.voice.mime, 'video/mp4');
+  assert.equal(videoSnapshot.voice.duration, 10);
+  assert.equal((await service.read(videoDraft.documentId, user.id)).content.voiceId, videoFile.id);
+  await app.documents(UID).update({ documentId: videoDraft.documentId, status: 'draft',
+    data: service.publicationFields(videoSnapshot) });
+  await app.documents(UID).publish({ documentId: videoDraft.documentId });
+  const videoPublished = await app.documents(UID).findOne({ documentId: videoDraft.documentId, status: 'published' });
+  assert.equal(videoPublished.storyPublishedContent.voice.id, videoFile.id);
+  assert.equal(videoPublished.storyPublishedContent.voice.mime, 'video/mp4');
+  assert.equal(videoPublished.storyPublishedContent.voice.duration, 10);
+  await app.documents(UID).delete({ documentId: videoDraft.documentId });
   draft = await service.save(
     draft.documentId,
     user.id,
