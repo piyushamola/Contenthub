@@ -31,6 +31,10 @@ function currencyForCountry(country) {
   const code = String(country || '').trim().toUpperCase();
   if (code === 'IN') return 'INR';
   if (code === 'PK') return 'PKR';
+  if (code === 'PH') return 'PHP';
+  if (code === 'ID') return 'IDR';
+  if (code === 'MY') return 'MYR';
+  if (code === 'SG') return 'SGD';
   if (code === 'GB') return 'GBP';
   if (EUROZONE_COUNTRIES.has(code)) return 'EUR';
   return 'USD';

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const lifecycle = require('../src/api/premium-pricing/content-types/premium-pricing/lifecycles');
+const currencyLifecycle = require('../src/api/currency-pricing/content-types/currency-pricing/lifecycles');
 
 const current = { indiaPriceRupees: 9, otherCountriesPriceUsd: 1, storyIndiaPriceRupees: 36, storyOtherCountriesPriceUsd: 5 };
 const optionalCurrent = {
@@ -64,5 +65,32 @@ for (const hook of ['beforeCreate', 'beforeUpdate', 'beforeUpdateMany']) {
     for (const [field, value] of Object.entries(current)) assert.equal(data[field], value);
     for (const field of Object.keys(originals)) assert.equal(data[field], null);
     assert.equal(data.note, 'Keep this value');
+  });
+}
+
+for (const hook of ['beforeCreate', 'beforeUpdate', 'beforeUpdateMany']) {
+  test(`currency-pricing ${hook} validates the 4 price fields (2 current + 2 cut originals) and currency code`, () => {
+    const valid = {
+      currency: ' php ',
+      standardPrice: 49,
+      standardOriginalPrice: 149,
+      storyPrice: 99,
+      storyOriginalPrice: 249.999,
+    };
+    currencyLifecycle[hook]({ params: { data: valid } });
+    assert.equal(valid.currency, 'PHP');
+    assert.equal(valid.standardPrice, 49);
+    assert.equal(valid.standardOriginalPrice, 149);
+    assert.equal(valid.storyPrice, 99);
+    assert.equal(valid.storyOriginalPrice, null);
+
+    assert.throws(
+      () => currencyLifecycle[hook]({ params: { data: { currency: 'INVALID', standardPrice: 10, storyPrice: 20 } } }),
+      (error) => error.name === 'ValidationError' && /currency must be one of/i.test(error.message),
+    );
+    assert.throws(
+      () => currencyLifecycle[hook]({ params: { data: { currency: 'MYR', standardPrice: 4.999, storyPrice: 8 } } }),
+      (error) => error.name === 'ValidationError' && /two decimal places/i.test(error.message),
+    );
   });
 }

@@ -231,7 +231,7 @@ async function main() {
       providerCalls.push({ method: init.method || 'GET', endpoint });
       if (endpoint === '/orders' && init.method === 'POST') {
         const input = JSON.parse(init.body);
-        if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || !['INR', 'USD', 'GBP', 'EUR', 'PKR'].includes(input.currency)) throw new Error('Invalid mock provider order');
+        if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || !['INR', 'USD', 'GBP', 'EUR', 'PKR', 'PHP', 'IDR', 'MYR', 'SGD'].includes(input.currency)) throw new Error('Invalid mock provider order');
         const order = { ...input, id: `order_regression${crypto.randomBytes(8).toString('hex')}`, status: 'created' };
         orders.set(order.id, order);
         return order;

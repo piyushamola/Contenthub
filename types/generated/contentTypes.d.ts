@@ -765,6 +765,70 @@ export interface ApiCollapsibleCollapsible extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCurrencyPricingCurrencyPricing
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'currency_pricings';
+  info: {
+    description: 'Scalable per-currency pricing with 4 price fields: 2 current prices shown to users (Standard & Story) and 2 original cut prices for discounts';
+    displayName: 'Currency pricing';
+    pluralName: 'currency-pricings';
+    singularName: 'currency-pricing';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    currency: Schema.Attribute.Enumeration<
+      ['INR', 'USD', 'GBP', 'EUR', 'PKR', 'PHP', 'IDR', 'MYR', 'SGD']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::currency-pricing.currency-pricing'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    standardOriginalPrice: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    standardPrice: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    storyOriginalPrice: Schema.Attribute.Decimal &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    storyPrice: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0.01;
+        },
+        number
+      >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiGiftCategoryGiftCategory
   extends Struct.CollectionTypeSchema {
   collectionName: 'gift_categories';
@@ -2292,6 +2356,7 @@ declare module '@strapi/strapi' {
       'api::celebration-email-delivery.celebration-email-delivery': ApiCelebrationEmailDeliveryCelebrationEmailDelivery;
       'api::celebration-purchase.celebration-purchase': ApiCelebrationPurchaseCelebrationPurchase;
       'api::collapsible.collapsible': ApiCollapsibleCollapsible;
+      'api::currency-pricing.currency-pricing': ApiCurrencyPricingCurrencyPricing;
       'api::gift-category.gift-category': ApiGiftCategoryGiftCategory;
       'api::gift-product.gift-product': ApiGiftProductGiftProduct;
       'api::global.global': ApiGlobalGlobal;

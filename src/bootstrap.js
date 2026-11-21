@@ -612,6 +612,14 @@ module.exports = async ({ strapi }) => {
   await ensureGoogleOAuthScope();
   await ensureGoogleProfileAuthCallback();
 
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      await strapi.service("api::currency-pricing.currency-pricing")?.ensureDefaultPppRows?.();
+    } catch (error) {
+      strapi.log.warn("Could not seed default PPP currency-pricing rows:", error);
+    }
+  }
+
   await rememberExistingPublications(strapi);
 
   // Register the lifecycle hook for newsletter-subscriber

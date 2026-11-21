@@ -3,7 +3,9 @@
 const { createCoreService } = require('@strapi/strapi').factories;
 
 const UID = 'api::premium-pricing.premium-pricing';
+const CURRENCY_PRICING_UID = 'api::currency-pricing.currency-pricing';
 const DEFAULT_PRICES = Object.freeze({ INR: 900, USD: 100 });
+const SUPPORTED_CURRENCIES = new Set(['INR', 'USD', 'GBP', 'EUR', 'PKR', 'PHP', 'IDR', 'MYR', 'SGD']);
 
 function toMinorUnits(value, label) {
   const amount = Number(value);
@@ -61,25 +63,53 @@ function withRegionalCurrencies(
   };
 }
 
+async function loadCurrencyPricingRows(strapi) {
+  const query = strapi?.db?.query?.(CURRENCY_PRICING_UID);
+  if (!query || typeof query.findMany !== 'function') return [];
+  const rows = await query.findMany({
+    select: ['currency', 'standardPrice', 'standardOriginalPrice', 'storyPrice', 'storyOriginalPrice'],
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function applyCurrencyPricingRows(base, rows, product) {
+  if (!rows.length) return base;
+  const result = { ...base };
+  const currentField = product === 'story' ? 'storyPrice' : 'standardPrice';
+  const originalField = product === 'story' ? 'storyOriginalPrice' : 'standardOriginalPrice';
+  for (const row of rows) {
+    const currency = String(row?.currency || '').trim().toUpperCase();
+    if (!SUPPORTED_CURRENCIES.has(currency)) continue;
+    const current = toMinorUnits(row[currentField], `${currency} ${product} price`);
+    const original = originalMinorUnits(row[originalField], current);
+    result[currency] = current;
+    result[`original${currency}`] = original;
+  }
+  return result;
+}
+
 module.exports = createCoreService(UID, ({ strapi }) => ({
   async storySettings() {
-    const settings = await strapi.db.query(UID).findOne({
-      select: [
-        'storyIndiaPriceRupees',
-        'storyOtherCountriesPriceUsd',
-        'storyIndiaOriginalPriceRupees',
-        'storyOtherCountriesOriginalPriceUsd',
-        'storyUkPriceGbp',
-        'storyUkOriginalPriceGbp',
-        'storyEuropePriceEur',
-        'storyEuropeOriginalPriceEur',
-        'storyPakistanPricePkr',
-        'storyPakistanOriginalPricePkr',
-      ],
-    });
+    const [settings, currencyRows] = await Promise.all([
+      strapi.db.query(UID).findOne({
+        select: [
+          'storyIndiaPriceRupees',
+          'storyOtherCountriesPriceUsd',
+          'storyIndiaOriginalPriceRupees',
+          'storyOtherCountriesOriginalPriceUsd',
+          'storyUkPriceGbp',
+          'storyUkOriginalPriceGbp',
+          'storyEuropePriceEur',
+          'storyEuropeOriginalPriceEur',
+          'storyPakistanPricePkr',
+          'storyPakistanOriginalPricePkr',
+        ],
+      }),
+      loadCurrencyPricingRows(strapi),
+    ]);
     const INR = toMinorUnits(settings?.storyIndiaPriceRupees ?? 36, 'Story India price');
     const USD = toMinorUnits(settings?.storyOtherCountriesPriceUsd ?? 5, 'Story other countries price');
-    return withRegionalCurrencies(
+    const base = withRegionalCurrencies(
       {
         INR,
         USD,
@@ -99,46 +129,54 @@ module.exports = createCoreService(UID, ({ strapi }) => ({
         pkrLabel: 'Story Pakistan price',
       },
     );
+    return applyCurrencyPricingRows(base, currencyRows, 'story');
   },
   async currentPrices() {
-    const settings = await strapi.db.query(UID).findOne({
-      select: [
-        'indiaPriceRupees',
-        'otherCountriesPriceUsd',
-        'indiaOriginalPriceRupees',
-        'otherCountriesOriginalPriceUsd',
-        'ukPriceGbp',
-        'ukOriginalPriceGbp',
-        'europePriceEur',
-        'europeOriginalPriceEur',
-        'pakistanPricePkr',
-        'pakistanOriginalPricePkr',
-      ],
-    });
+    const [settings, currencyRows] = await Promise.all([
+      strapi.db.query(UID).findOne({
+        select: [
+          'indiaPriceRupees',
+          'otherCountriesPriceUsd',
+          'indiaOriginalPriceRupees',
+          'otherCountriesOriginalPriceUsd',
+          'ukPriceGbp',
+          'ukOriginalPriceGbp',
+          'europePriceEur',
+          'europeOriginalPriceEur',
+          'pakistanPricePkr',
+          'pakistanOriginalPricePkr',
+        ],
+      }),
+      loadCurrencyPricingRows(strapi),
+    ]);
     // The old prices stay in effect until the singleton is saved for the
     // first time in Strapi. Once saved, invalid data must fail closed.
-    if (!settings) return { ...DEFAULT_PRICES, originalINR: null, originalUSD: null };
-    const INR = toMinorUnits(settings.indiaPriceRupees, 'India price');
-    const USD = toMinorUnits(settings.otherCountriesPriceUsd, 'Other countries price');
-    return withRegionalCurrencies(
-      {
-        INR,
-        USD,
-        originalINR: originalMinorUnits(settings.indiaOriginalPriceRupees, INR),
-        originalUSD: originalMinorUnits(settings.otherCountriesOriginalPriceUsd, USD),
-      },
-      settings,
-      {
-        gbpField: 'ukPriceGbp',
-        gbpOriginalField: 'ukOriginalPriceGbp',
-        gbpLabel: 'UK price',
-        eurField: 'europePriceEur',
-        eurOriginalField: 'europeOriginalPriceEur',
-        eurLabel: 'Europe price',
-        pkrField: 'pakistanPricePkr',
-        pkrOriginalField: 'pakistanOriginalPricePkr',
-        pkrLabel: 'Pakistan price',
-      },
-    );
+    const base = !settings
+      ? { ...DEFAULT_PRICES, originalINR: null, originalUSD: null }
+      : (() => {
+          const INR = toMinorUnits(settings.indiaPriceRupees, 'India price');
+          const USD = toMinorUnits(settings.otherCountriesPriceUsd, 'Other countries price');
+          return withRegionalCurrencies(
+            {
+              INR,
+              USD,
+              originalINR: originalMinorUnits(settings.indiaOriginalPriceRupees, INR),
+              originalUSD: originalMinorUnits(settings.otherCountriesOriginalPriceUsd, USD),
+            },
+            settings,
+            {
+              gbpField: 'ukPriceGbp',
+              gbpOriginalField: 'ukOriginalPriceGbp',
+              gbpLabel: 'UK price',
+              eurField: 'europePriceEur',
+              eurOriginalField: 'europeOriginalPriceEur',
+              eurLabel: 'Europe price',
+              pkrField: 'pakistanPricePkr',
+              pkrOriginalField: 'pakistanOriginalPricePkr',
+              pkrLabel: 'Pakistan price',
+            },
+          );
+        })();
+    return applyCurrencyPricingRows(base, currencyRows, 'standard');
   },
 }));

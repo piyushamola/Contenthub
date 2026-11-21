@@ -285,3 +285,58 @@ test('new Razorpay orders use the saved price and existing orders retain theirs'
     else process.env.RAZORPAY_KEY_SECRET = previousKeySecret;
   }
 });
+
+test('currency-pricing collection rows with 4 price fields override and extend regional PPP prices for PH, ID, MY, and SG', async () => {
+  const currencyRows = [
+    { currency: 'INR', standardPrice: '18', standardOriginalPrice: '49', storyPrice: '45', storyOriginalPrice: '99' },
+    { currency: 'USD', standardPrice: '1', standardOriginalPrice: '3', storyPrice: '2.99', storyOriginalPrice: '7' },
+    { currency: 'PHP', standardPrice: '49', standardOriginalPrice: '149', storyPrice: '99', storyOriginalPrice: '249' },
+    { currency: 'IDR', standardPrice: '15000', standardOriginalPrice: '39000', storyPrice: '29000', storyOriginalPrice: '69000' },
+    { currency: 'MYR', standardPrice: '4', standardOriginalPrice: '12', storyPrice: '8', storyOriginalPrice: '19' },
+    { currency: 'SGD', standardPrice: '1.99', standardOriginalPrice: '5', storyPrice: '3.99', storyOriginalPrice: '9' },
+  ];
+  const pricing = pricingFactory({
+    strapi: {
+      contentType: fakeContentType,
+      db: {
+        query: (uid) => {
+          if (uid === 'api::currency-pricing.currency-pricing') {
+            return { findMany: async () => currencyRows };
+          }
+          return { findOne: async () => null };
+        },
+      },
+    },
+  });
+
+  const standard = await pricing.currentPrices();
+  const story = await pricing.storySettings();
+  assert.deepEqual(standard, {
+    INR: 1800,
+    USD: 100,
+    PHP: 4900,
+    IDR: 1500000,
+    MYR: 400,
+    SGD: 199,
+    originalINR: 4900,
+    originalUSD: 300,
+    originalPHP: 14900,
+    originalIDR: 3900000,
+    originalMYR: 1200,
+    originalSGD: 500,
+  });
+  assert.deepEqual(story, {
+    INR: 4500,
+    USD: 299,
+    PHP: 9900,
+    IDR: 2900000,
+    MYR: 800,
+    SGD: 399,
+    originalINR: 9900,
+    originalUSD: 700,
+    originalPHP: 24900,
+    originalIDR: 6900000,
+    originalMYR: 1900,
+    originalSGD: 900,
+  });
+});

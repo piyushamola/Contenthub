@@ -1,0 +1,51 @@
+{
+  "kind": "collectionType",
+  "collectionName": "currency_pricings",
+  "info": {
+    "singularName": "currency-pricing",
+    "pluralName": "currency-pricings",
+    "displayName": "Currency pricing",
+    "description": "Scalable per-currency pricing with 4 price fields: 2 current prices shown to users (Standard & Story) and 2 original cut prices for discounts"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "currency": {
+      "type": "enumeration",
+      "enum": [
+        "INR",
+        "USD",
+        "GBP",
+        "EUR",
+        "PKR",
+        "PHP",
+        "IDR",
+        "MYR",
+        "SGD"
+      ],
+      "required": true,
+      "unique": true
+    },
+    "standardPrice": {
+      "type": "decimal",
+      "required": true,
+      "min": 0.01
+    },
+    "standardOriginalPrice": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    },
+    "storyPrice": {
+      "type": "decimal",
+      "required": true,
+      "min": 0.01
+    },
+    "storyOriginalPrice": {
+      "type": "decimal",
+      "required": false,
+      "min": 0.01
+    }
+  }
+}
